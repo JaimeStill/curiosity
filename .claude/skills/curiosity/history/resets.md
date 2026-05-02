@@ -54,3 +54,28 @@ Append-only record of context resets — bookkeeping transactions that bring des
 **Closeout-protocol observations (first run)**:
 - Step ordering for context-only sessions favors decisions before docs/context updates, because the docs being adjusted (e.g., `SKILL.md`, `execution.md`) embed the decisions being recorded. The closeout sequence in `execution.md` reflects this — decisions at step 4, documentation/context at step 5. For development sessions where decisions describe new commitments and docs/context handles decay, the ordering is independent and the same sequence still applies cleanly.
 - The post-session planning discussion (step 3) and the session's own opening plan-mode discussion can blur for context-type sessions, since the session's substance is itself planning. For this session, the rolling design discussion served as both — no separate step-3 pass was needed before producing closeout artifacts. Worth observing on the next context session whether the same pattern holds.
+
+---
+
+## R-003 — `design/engine/runtime.md` and `concepts/engine/` stubs — 2026-05-02
+
+**Scope**: engine
+
+**Trigger**: Carryout of R-002's "Next session focus" — first occupant of `design/engine/` plus companion stubs in `concepts/engine/` for the unsettled material runtime.md elides.
+
+**Integrated**:
+- `design/engine/runtime.md` — first design-grade engine artifact. Sections: tier criterion, inner-tier members (ECS, voxel data, physics, rendering), outer-tier members (audio, UI, storage, networking, content pipeline), runtime roles (frame loop, scheduling, lifecycle, resource ownership). Grounded in D-002. Member sections at 2–3 sentences each: responsibility plus tier-placement reasoning.
+- `concepts/engine/scheduler.md`, `concepts/engine/render-thread.md`, `concepts/engine/ecs-storage.md`, `concepts/engine/outer-tier-contract.md` — each in tightest shape (question plus constraints from D-002 and runtime.md). No candidate framings; depth added when each topic becomes imminent.
+- SKILL.md adjustments embedding D-013: the descriptions of `runtime.md`, `components.md`, and `components/<name>.md` revised to name the holistic-vs-index split, frame `components.md` as an index pointing into per-component depth files, and align `components/<name>.md` with the design/concepts split (unsettled material lives in `concepts/engine/`, not in component depth files).
+
+**Promoted**: None.
+
+**Culled**: None.
+
+**Retained**:
+- The four concept files are forward-looking; depth pass deferred until imminence.
+- `design/engine/components.md` is not yet materialized; its first row appears when the first per-component depth file is created.
+
+**Decisions promoted**: D-013 (role separation between `design/engine/runtime.md` and `design/engine/components.md`: holistic vs. index).
+
+**Next session focus**: Draft `design/game/premise.md` as a *context*-type session on topic branch `design-game-premise`. The premise stays short (a page or two) and aspirational per SKILL.md — its job is to provide design pressure for engine validation and a coherent target for game-side work, not to specify the game. Section shape is settled at session start.
