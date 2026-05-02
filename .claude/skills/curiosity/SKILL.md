@@ -56,7 +56,7 @@ The dependency policy applies independently to engine and game code. Game-side d
     design/                             codified, validated intent
       engine/
         runtime.md                      core engine runtime layout
-        components.md                   inner and outer component inventory
+        components.md                   index of inner/outer component specs
         components/<name>.md            per-component depth, created on demand
       game/
         premise.md                      aspirational target for the reference game
@@ -104,11 +104,11 @@ Concepts that are falsified, superseded, or no longer load-bearing are culled, n
 
 ### Engine design documents
 
-**`design/engine/runtime.md`** is the load-bearing engine document. It defines the inner-tier boundaries (the systems that share memory and frame lifecycle: ECS, voxel data, physics, rendering), the outer-tier contract (the interface plug-in components implement), and the runtime's own responsibilities (frame loop, scheduling, lifecycle, resource ownership). Referenced by everything else and the most expensive to get wrong.
+**`design/engine/runtime.md`** is the load-bearing engine document. It captures runtime characteristics holistically — the inner-tier boundaries (the systems that share memory and frame lifecycle: ECS, voxel data, physics, rendering), the outer-tier contract (the interface plug-in components implement), and the runtime's own responsibilities (frame loop, scheduling, lifecycle, resource ownership). Per-sub-system detail lives in `components.md` and the per-component files it indexes. Referenced by everything else and the most expensive to get wrong.
 
-**`design/engine/components.md`** is shallow by default: a list of inner and outer components with one to two sentences each on responsibility and rough interface shape. Depth is added in `design/engine/components/<name>.md` only when that component is being worked on.
+**`design/engine/components.md`** is the index of inner and outer component specifications. Each entry is one to two lines — the component's name, a brief responsibility, and a link to its per-component depth file (`design/engine/components/<name>.md`) when that file exists. The index sits empty until the first per-component depth file is created. It does not duplicate runtime.md's tier-placement framing, and it does not carry interface shape (interface shape is concept-tier until firm, per D-010).
 
-**`design/engine/components/<name>.md`** is created when a component is about to receive concrete attention. Captures interface intent, internal model decisions, open questions, and constraints. Dissolved into source when the component reaches a working MVP; the dissolution is recorded as a reset transaction.
+**`design/engine/components/<name>.md`** is created when a component is about to receive concrete attention. Captures interface intent, internal model decisions, and constraints not yet enforced in code. Material that remains unsettled lives under `concepts/engine/`, not here. Dissolved into source when the component reaches a working MVP; the dissolution is recorded as a reset transaction.
 
 Engine concepts that are not yet ready for design live under `concepts/engine/` with the same `<topic>.md` naming convention.
 
