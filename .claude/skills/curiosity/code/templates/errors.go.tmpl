@@ -1,0 +1,84 @@
+// Package {{PACKAGE}} error definitions.
+// See code/conventions.md §8 for the error pattern this file implements.
+
+package {{PACKAGE}}
+
+import (
+	"errors"
+	"fmt"
+	"time"
+)
+
+// ErrorType identifies a category of {{PACKAGE}} error.
+type ErrorType string
+
+const (
+	ErrorTypeInit      ErrorType = "init"
+	ErrorTypeOperation ErrorType = "operation"
+)
+
+// Sentinel errors for stable identity comparisons via errors.Is.
+var (
+	Err{{Type}}NotFound  = errors.New("{{lowercase-type}} not found")
+	Err{{Type}}Exists    = errors.New("{{lowercase-type}} already exists")
+	ErrEmpty{{Type}}Name = errors.New("{{lowercase-type}} name is empty")
+)
+
+// {{Type}}Error is the structured error type returned by this package.
+type {{Type}}Error struct {
+	Type      ErrorType `json:"type"`
+	ID        string    `json:"id,omitempty"`
+	Name      string    `json:"name,omitempty"`
+	Code      string    `json:"code,omitempty"`
+	Message   string    `json:"message"`
+	Cause     error     `json:"-"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+// Error implements the error interface.
+func (e *{{Type}}Error) Error() string {
+	if e.Cause != nil {
+		return fmt.Sprintf("%s: %s: %v", e.Type, e.Message, e.Cause)
+	}
+	return fmt.Sprintf("%s: %s", e.Type, e.Message)
+}
+
+// Unwrap returns the underlying cause for errors.Is and errors.As traversal.
+func (e *{{Type}}Error) Unwrap() error { return e.Cause }
+
+// {{Type}}ErrorOption configures a {{Type}}Error at construction.
+type {{Type}}ErrorOption func(*{{Type}}Error)
+
+// New{{Type}}Error constructs a {{Type}}Error with the given type and message,
+// applying any provided options.
+func New{{Type}}Error(t ErrorType, message string, opts ...{{Type}}ErrorOption) *{{Type}}Error {
+	e := &{{Type}}Error{
+		Type:      t,
+		Message:   message,
+		Timestamp: time.Now().UTC(),
+	}
+	for _, opt := range opts {
+		opt(e)
+	}
+	return e
+}
+
+// WithCode sets the error code.
+func WithCode(code string) {{Type}}ErrorOption {
+	return func(e *{{Type}}Error) { e.Code = code }
+}
+
+// WithCause attaches an underlying cause to the error.
+func WithCause(cause error) {{Type}}ErrorOption {
+	return func(e *{{Type}}Error) { e.Cause = cause }
+}
+
+// WithName attaches a name for the failing entity.
+func WithName(name string) {{Type}}ErrorOption {
+	return func(e *{{Type}}Error) { e.Name = name }
+}
+
+// WithID attaches an identifier for the failing entity.
+func WithID(id string) {{Type}}ErrorOption {
+	return func(e *{{Type}}Error) { e.ID = id }
+}

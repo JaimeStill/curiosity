@@ -1,0 +1,19 @@
+# Sub-project repos (live in their own git repos)
+/engine/
+/game/
+
+# Editor/OS noise
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+tmp/
+temp/
+*.log
+
+# Per-machine Claude state (not shared)
+.claude/settings.local.json
+.claude/.credentials.json

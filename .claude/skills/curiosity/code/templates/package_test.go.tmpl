@@ -1,0 +1,38 @@
+// Package {{PACKAGE}}_test contains black-box tests for {{PACKAGE}}.
+// See code/conventions.md §9 for the testing pattern.
+
+package {{PACKAGE}}_test
+
+import (
+	"testing"
+
+	"{{MODULE_PATH}}/{{PACKAGE}}"
+)
+
+func Test{{Type}}_Basic(t *testing.T) {
+	cases := []struct {
+		name string
+		in   {{InputType}}
+		want {{WantType}}
+	}{
+		{
+			name: "basic case",
+			in:   {{InputType}}{},
+			want: {{WantType}}{},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := {{PACKAGE}}.{{FunctionUnderTest}}(tc.in)
+			if got != tc.want {
+				t.Errorf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func new{{Type}}Fixture(t *testing.T) *{{PACKAGE}}.{{Type}} {
+	t.Helper()
+	return {{PACKAGE}}.New{{Type}}( /* fixture parameters */ )
+}
