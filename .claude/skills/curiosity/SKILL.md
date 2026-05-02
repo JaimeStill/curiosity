@@ -50,30 +50,57 @@ The dependency policy applies independently to engine and game code. Game-side d
 ## Repository Layout
 
 ```
-SKILL.md                          this file
-design/
-  engine/
-    runtime.md                    core engine runtime layout
-    components.md                 inner and outer component inventory
-    components/<name>.md          per-component depth, created on demand
-  game/
-    premise.md                    aspirational target for the reference game
-    <other game design docs>      created as game design surfaces them
-history/
-  decisions.md                    append-only architectural decisions
-  resets.md                       append-only reset transaction summaries
-resources/
-  assets.md                       curated asset acquisition resources
-<source directories>              created as components materialize
+~/code/curiosity/                       planning workspace (this git repo)
+  .claude/skills/curiosity/             project skill
+    SKILL.md                            this file
+    design/                             codified, validated intent
+      engine/
+        runtime.md                      core engine runtime layout
+        components.md                   inner and outer component inventory
+        components/<name>.md            per-component depth, created on demand
+      game/
+        premise.md                      aspirational target for the reference game
+        <other game design docs>        created as game design surfaces them
+    concepts/                           unvalidated candidates under consideration
+      engine/<topic>.md                 candidate engine concepts
+      game/<topic>.md                   candidate game concepts
+    history/
+      decisions.md                      append-only architectural decisions
+      resets.md                         append-only reset transaction summaries
+    resources/
+      assets.md                         curated asset acquisition resources
+    code/
+      conventions.md                    Go conventions for engine and game code
+      templates/                        scaffolding templates
+  experiments/                          hands-on R&D, tracked in this repo
+    <experiment-name>/
+      README.md                         Question / Approach / Finding
+      <go source>                       prototype code (exempt from conventions)
+  <engine, game, ...>                   source repos, gitignored from this workspace
 ```
 
-Source layout reflects the same separation: engine code and game code live in distinct trees, and the engine has no compile-time dependency on game code.
+Source layout reflects the engine/game separation: engine code and game code live in distinct trees as gitignored sibling directories under the workspace, each with its own git history. The engine has no compile-time dependency on game code.
 
-The `resources/` directory holds reference material that is not subject to the documentation-decay discipline - curated lists, acquisition references, external pointers. It exists alongside design and history but follows different rules: entries are added or revised as the external landscape shifts, not as code absorbs them.
+The `design/` and `concepts/` directories are paired and mirror each other's scope tree (`engine/`, `game/`, project-level). `design/` holds codified intent; `concepts/` holds unvalidated candidates. Concepts are promoted to design only via deliberate bookkeeping in the reset log.
+
+The `experiments/` directory holds standalone Go programs for hands-on validation of concepts that paper alone cannot settle. Experiments are tracked in this repo because their findings inform the planning surface; they are not separate projects, and their code is short-lived (an experiment is removed once its job is done — see the Reset Protocol section).
+
+The `resources/` directory holds reference material that is not subject to the documentation-decay discipline — curated lists, acquisition references, external pointers. It exists alongside the planning surface but follows different rules: entries are added or revised as the external landscape shifts, not as code absorbs them.
 
 ## Design Documentation Conventions
 
-Design documents are reference material, not historical record. They describe the present forward-looking state of intent for things not yet built or not yet fully expressed in code.
+Design documents are reference material, not historical record. They describe the present forward-looking state of intent for things not yet built or not yet fully expressed in code. The planning surface separates two claim qualities by directory:
+
+- **`design/`** — codified, validated intent. Claims grounded in decision-log entries, source code, or hard external constraints.
+- **`concepts/`** — unvalidated candidates under consideration. Ideas that are not yet ready for design, including open questions and exploratory directions.
+
+A reader can identify a claim's status by the file's directory location, without parsing the prose for confidence cues.
+
+### Design vs. concepts
+
+The two directories mirror each other's scope tree (`engine/`, `game/`, project-level), so a concept's eventual design home is structurally predictable. A concept is promoted to design only via deliberate bookkeeping in the reset log; promotion requires that the writer can articulate why the concept now meets the tangible-and-realistic bar — typically because a decision-log entry was appended, source code was written, or an experiment produced a concrete finding.
+
+Concepts that are falsified, superseded, or no longer load-bearing are culled, not edited indefinitely toward viability. Culling is also bookkeeping in the reset log.
 
 ### Engine design documents
 
@@ -83,13 +110,27 @@ Design documents are reference material, not historical record. They describe th
 
 **`design/engine/components/<name>.md`** is created when a component is about to receive concrete attention. Captures interface intent, internal model decisions, open questions, and constraints. Dissolved into source when the component reaches a working MVP; the dissolution is recorded as a reset transaction.
 
+Engine concepts that are not yet ready for design live under `concepts/engine/` with the same `<topic>.md` naming convention.
+
 ### Game design documents
 
 **`design/game/premise.md`** stays short and aspirational. A page or two. Not a specification. Its job is to provide design pressure for engine validation and a coherent target for game-side work.
 
 Additional game design documents are created as the reference game's design surfaces concrete needs. They follow the same documentation-decay discipline as engine docs.
 
+Game concepts that are not yet ready for design live under `concepts/game/`.
+
 When a design doc section becomes describable from code alone, remove it. The reset log notes the absorption.
+
+### Experiments
+
+Some questions cannot be settled on paper. When validation requires hands-on exploration, an experiment is created under `experiments/<name>/`. Each experiment carries a `README.md` with three sections: *Question* (what the experiment is trying to determine), *Approach* (how it goes about answering), and *Finding* (what the experiment showed). The Finding section may be empty while the experiment is in flight; an empty Finding marks the experiment as unfinished.
+
+Experiments are exempt from `code/conventions.md`. They are allowed to be quick and dirty — no `doc.go`, no unit-test ceremony, no convention enforcement.
+
+Experiments are time-bounded. An experiment exists only while its job is active. **Success path** — experiment validates a concept, concept is promoted to design, design is integrated into source code, then the experiment is removed in that integration session's closeout. **Failure path** — experiment falsifies or refines a concept, finding is captured in `concepts/`, then the experiment is removed in the same session's closeout. Either way, the working tree carries only experiments that still have a job; git history retains the originals for anyone who wants them.
+
+**No-graduation rule.** Experiment code never becomes engine or game code. Findings inform fresh implementation written against the validated design; the prototype is not lifted forward. The act of writing fresh implementation against a design is itself part of the validation.
 
 ## Decisions Log
 
@@ -115,41 +156,54 @@ Decisions worth logging include but are not limited to: choice of dependency, in
 
 ## Reset Protocol
 
-A reset is a bookkeeping transaction that brings design documentation and code back into alignment. It is event-triggered, not time-triggered.
+A reset is a bookkeeping transaction that aligns design documentation, concepts, experiments, and code. Every session's closeout includes a reset (the post-session planning discussion in `.claude/behavior/execution.md` produces it). Additional resets fire event-triggered when drift is observed outside a session boundary.
 
-**Reset triggers:**
+**Standing reset trigger:**
+- The post-session planning discussion at every session's closeout.
+
+**Event-triggered (outside the session boundary):**
 - A component crosses from design into working code.
 - An inner-tier module stabilizes.
 - Visible drift between design docs and current code.
 - A session reveals implicit conflicts between accumulated decisions.
 
-**Reset operation.** Every piece of forward-looking design context faces a binary choice:
+**Reset operation.** Every piece of forward-looking context faces a choice:
 
-- **Integrated** - absorbed into code. The design text is removed. The reset summary records what was absorbed and where.
-- **Retained** - still forward-looking. Stays in place.
+- **Integrated** — absorbed into code or implementation. The design or concept text is removed; the reset summary records what was absorbed and where. Findings from completed experiments are integrated when they reshape a concept or feed a design.
+- **Promoted** — concept is promoted to design. The concept file moves into the design tree; the reset summary records the originating concept and its new design home.
+- **Culled** — context removed as obsolete, superseded, or falsified. Includes design sections, concepts, and experiments whose job has ended.
+- **Retained** — still forward-looking. Stays in place.
 
-There is no third "completed but still documented" state. That state is the drift this protocol exists to prevent.
+There is no "completed but still documented" state. That state is the drift this protocol exists to prevent.
 
 **Reset transaction summary.** Appended to `history/resets.md` for each reset. Captures:
 
 ```
-## <date> - <short title>
+## <date> — <short title>
 
 Scope: engine | game | project
 Trigger: what prompted the reset
-Integrated: design context absorbed into code, with pointers to source
-Culled: design context removed as obsolete or superseded
+Integrated: context absorbed into code or implementation, with pointers to source
+Promoted: concepts that became design entries, with traceability to originating concept
+Culled: context removed as obsolete, superseded, or falsified
+        (includes completed experiments)
 Retained: forward-looking context that remains
-Decisions promoted: any decisions written to the decisions log during this reset
+Decisions promoted: decisions written to the decisions log during this reset
+Next session focus: concrete description of the next session's target and type
+                    (development | context | experiment)
 ```
 
 Summaries are short. A reset is bookkeeping, not narrative.
+
+The `Next session focus` field is the artifact that connects sessions — written at one session's close, read at the next session's start as the orientation seed.
 
 ## When This Skill Activates
 
 Whenever work is happening in this repository. The discipline applies to:
 
-- Adding to or modifying any file under `design/`
+- Adding to or modifying any file under `design/` or `concepts/`
+- Promoting a concept to design, or culling a concept
+- Creating, advancing, or removing an experiment under `experiments/`
 - Recording entries in `history/decisions.md` or `history/resets.md`
 - Evaluating a new dependency
 - Deciding whether a piece of design context has been resolved into code
@@ -158,9 +212,3 @@ Whenever work is happening in this repository. The discipline applies to:
 - Deciding whether a surfaced requirement belongs in engine or game code
 
 Before any of the above, this skill is consulted to ensure the working principles, conventions, and protocols are applied.
-
-## Initial State
-
-On project initialization, this file exists alone. The first concrete work is to draft `design/engine/runtime.md` as the load-bearing architectural document, then `design/engine/components.md` as a shallow inventory. `design/game/premise.md` is drafted in parallel or shortly after, with the explicit understanding that it informs engine validation rather than engine architecture. `history/decisions.md` and `history/resets.md` are created empty and populated as events warrant.
-
-No code exists yet. The first code is written when the design documentation is sufficient to make the next concrete step obvious - and not before that point and not after it.

@@ -4,6 +4,26 @@ How work flows through a session in this workspace. Loaded when
 starting work, structuring a checkpoint, deciding tool spread, or
 preparing to commit or push.
 
+## Session types
+
+Three session types are recognized; type is named in the session
+agenda at session start and confirmed (or revised) by the
+post-session planning discussion that closes the prior session.
+
+- **Development sessions** produce engine or game source code. They
+  have a development phase between session start and closeout. Godoc
+  and unit tests are written during closeout.
+- **Context sessions** produce or revise planning-surface artifacts
+  (design, concepts, history, behavior layer, conventions, skill
+  content). They have no development phase — work happens directly
+  between session start and closeout. Godoc and unit-test steps in
+  closeout are no-ops.
+- **Experiment sessions** produce throwaway code under
+  `experiments/<name>/` together with a `README.md` recording the
+  finding. The development phase produces the experiment. Godoc and
+  unit-test steps in closeout are no-ops — experiments are exempt
+  from `code/conventions.md`.
+
 ## Session lifecycle
 
 ### Session start
@@ -13,14 +33,14 @@ exit it:
 
 1. **Orient.** Read the most recent entry in `history/resets.md` to
    see where the prior session left things — what was integrated,
-   what remains forward-looking. On a fresh project where `resets.md`
-   holds only the initialization entry, that entry IS the
-   orientation. Load relevant skill content.
+   what was promoted, what was culled, what remains forward-looking,
+   and what the prior session named as the next session's focus and
+   type. Load relevant skill content.
 
-2. **Scope.** Lay out the session agenda — what we're aiming to land,
-   scoped to a token budget that leaves headroom against context rot
-   while still completing meaningful work. The agenda is a forward
-   commitment that adjusts as we work; it is not a contract.
+2. **Scope.** Lay out the session agenda — type, target, and a token
+   budget that leaves headroom against context rot while still
+   completing meaningful work. The agenda is a forward commitment
+   that adjusts as we work; it is not a contract.
 
 Plan mode exits only after both have happened.
 
@@ -28,15 +48,19 @@ Plan mode exits only after both have happened.
 
 Immediately after plan mode exits, create a branch. Branch name is a
 topic slug derived from the session agenda — e.g., `init-workspace`,
-`voxel-mesh-naive`. Short, lowercase, hyphen-separated. All session
-work happens on the branch.
+`voxel-mesh-naive`, `workflow-protocol-revision`. Short, lowercase,
+hyphen-separated. All session work happens on the branch.
 
 ### Development phase
 
-Source-code design and implementation. You author per
+Source-code design and implementation (development sessions) or
+prototype construction (experiment sessions). You author per
 `source-code.md`; I provide scene-setting, scaffolding, and
-surrounding context. The development phase ends when the source code
-for the session agenda is implemented and we agree to transition.
+surrounding context. The phase ends when the session's intended
+source is in place and we agree to transition.
+
+Context sessions skip this phase entirely — the planning-surface
+work happens directly between session start and closeout.
 
 Pacing and checkpoint rules (below) apply throughout.
 
@@ -45,22 +69,44 @@ Pacing and checkpoint rules (below) apply throughout.
 My responsibilities engage in coordinated order:
 
 1. **Godoc comments.** Write or revise godoc on new and modified
-   exported symbols.
+   exported symbols. *No-op for context and experiment sessions.*
+
 2. **Unit tests.** Write or revise tests covering the session's
-   source-code changes.
-3. **Documentation and context artifacts.** Update `.claude/`
-   infrastructure as needed: design docs that have been absorbed
-   into code get culled (per the documentation-decay discipline in
-   `SKILL.md`); decisions made during the session get appended to
-   `history/decisions.md`; a reset entry gets appended to
-   `history/resets.md`.
-4. **Commit.** Ask before committing. Commit message follows the
-   style in `~/.claude/CLAUDE.md`: imperative subject, body paragraph.
-5. **Push.** Ask before pushing.
-6. **PR.** Create a pull request using `gh pr create`. The PR body
-   is lifted from the closeout entry just appended to `resets.md` —
-   no separate authoring, no drift between the durable record and
-   the PR description.
+   source-code changes. *No-op for context and experiment sessions.*
+
+3. **Post-session planning discussion.** Conducted in plan mode.
+   Review what the session accomplished. Evaluate the current state
+   of `design/`, `concepts/`, and `experiments/`. Surface (a) any
+   concept→design promotions, (b) any concept culls, (c) any design
+   absorptions where source landed, (d) any experiment removals
+   whose job has ended, (e) the next session's focus and type. The
+   discussion produces the to-do list for the remaining closeout
+   steps.
+
+4. **Decisions log.** Append entries to
+   `.claude/skills/curiosity/history/decisions.md` for any
+   architectural decisions surfaced during the session, in the shape
+   defined in `SKILL.md`'s Decisions Log section.
+
+5. **Documentation and context artifacts.** Apply the outcomes from
+   step 3 against the planning surface: update `design/` and
+   `concepts/`; move promoted concept files into the design tree;
+   remove culled concepts and finished experiments; update `.claude/`
+   infrastructure if it changed during the session. When a doc
+   embeds a decision recorded in step 4, this is the step that lands
+   that change.
+
+6. **Reset entry.** Append a reset entry to
+   `.claude/skills/curiosity/history/resets.md` using the shape
+   defined in `SKILL.md`'s Reset Protocol section, including the
+   `Next session focus` field set from step 3.
+
+7. **Commit / push / PR.** Ask before committing. Commit message
+   follows the style in `~/.claude/CLAUDE.md`: imperative subject,
+   body paragraph. Ask before pushing. Create a pull request using
+   `gh pr create`; the PR body is lifted from the reset entry — no
+   separate authoring, no drift between the durable record and the
+   PR description.
 
 The session is complete once the PR is submitted. Post-PR cleanup
 (merge, branch deletion) is yours.
