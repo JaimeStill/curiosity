@@ -29,3 +29,14 @@ lifetime when an outer-tier member is invoked or invokes the runtime?
   boundary; content pipeline: resource side of the contract). The
   contract must support each of these without dragging inner-tier
   internals into its surface.
+- The contract is asymmetric. Each outer-tier member exposes its own
+  unique outbound surface to the runtime, reflecting its role and
+  cadence (audio: event-consumption-shaped; storage: async-I/O-shaped;
+  UI: bidirectional). The runtime's *inbound* surface to outer-tier
+  members — the API outer-tier code uses to read or write engine state
+  — is consistent across members. Whether implemented as a single
+  handle or as a coherent set of handles, every outer-tier member sees
+  the same set of capabilities; no member receives a tailored sub-API.
+  This refines the stable-contract commitment in D-002; promotion to a
+  discrete decision is deferred until the contract receives a depth
+  pass.
