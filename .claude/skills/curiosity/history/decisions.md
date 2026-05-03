@@ -183,3 +183,31 @@ Append-only record of significant architectural decisions for the curiosity proj
 **Reasoning**: Two distinct purposes — architectural anchor vs. mechanical inventory — are best served by two distinct docs with named roles. Naming the linkage explicitly prevents content from drifting into the wrong doc. Keeping `components.md` empty until per-component depth exists prevents premature stub material that violates the design/concepts discipline.
 
 **Alternatives**: (1) Cull `components.md` from SKILL.md entirely on the grounds that runtime.md's member sections subsume it — rejected because runtime.md captures tier placement, not per-sub-system detail, and a separate index makes per-component detail discoverable as it accumulates. (2) Allow `components.md` to carry interface shape directly — rejected because interface shape is concept-tier until firm; SKILL.md must respect the design/concepts split.
+
+---
+
+## D-014 — Game-side concepts default malleable longer than the iterative-depth principle alone implies — 2026-05-02
+
+**Scope**: project
+
+**Context**: During R-004 (the design-game-premise session), after drafting `design/game/premise.md` and four companion concept stubs, the user surfaced that game-side design specifically should remain open to optimization through iteration. Their explicit framing: *"There's a lot for us to explore in this space, and I don't want us to get too locked into a particular element or vision. We should optimize what works best and provides the best feeling experiences possible."* Earlier in the same session, about the conflict-and-encounters stub: *"I just want it to be there for us to explore."* The default iterative-depth principle (SKILL.md, "Iterative depth") treats engine and game alike; this guidance asymmetrically prioritizes malleability for game-side material.
+
+**Decision**: For game-side concepts and design (`concepts/game/`, `design/game/`), default to holding material malleable longer than the iterative-depth principle alone implies. Capture intent as questions in `concepts/game/<topic>.md` stubs rather than committing to mechanism specifics; favor letting playable validation decide which combinations feel best. When a depth pass becomes imminent, prefer expanding the *Question* (more sub-questions, more constraints made explicit) over proposing mechanisms. When tempted to add a new game-side bullet to an `Aspirational targets` section that commits the engine to a specific feel, ask whether the commitment is genuinely engine-pressure (it earns the bullet) or game-design preference (it lives in concepts). Engine-side discipline remains the standard iterative-depth shape — game-side gets the asymmetric carve-out.
+
+**Reasoning**: Game design lives downstream of "what feels good in play," which paper alone cannot decide; premature mechanism commitment closes off optimization the player would benefit from. Engine architecture has more anchors in physical and computational constraint, so iterative depth there is less prone to over-locking. The asymmetric treatment is honest about the different evaluation surfaces — engine choices can often be reasoned about in isolation; game choices typically cannot.
+
+**Alternatives**: (1) Apply iterative-depth uniformly across engine and game — rejected because the user explicitly differentiated; treating them alike would either over-lock game-side or under-deepen engine-side. (2) Defer all game-side concept depth indefinitely — rejected because some game design questions will eventually need depth (e.g., when a vertical slice forces a decision); the carve-out is "default malleable longer," not "never deepen." (3) Lift the same caution to engine — rejected because engine constraints are more deterministic and benefit from earlier depth.
+
+---
+
+## D-015 — No memory-tier for this project; all context lives in the repository — 2026-05-02
+
+**Scope**: project
+
+**Context**: During R-004's closeout, after a feedback memory was saved to `~/.claude/projects/-home-jaime-code-curiosity/memory/feedback_game_design_iteration.md` to capture the game-side iteration emphasis later codified as D-014, the user surfaced that memory-tier persistence is itself anti-pattern for this project: *"we should avoid using memory-tier altogether because it escapes the contextual encoding of the repository."* Memory escapes the repo's cross-machine surface — context saved to memory is not recoverable from a fresh clone of the workspace, breaking single source of truth (D-003) and cross-machine sync (D-006, D-008) the same way GitHub Issues would.
+
+**Decision**: The auto-memory system is not used for this project. All context — user preferences, project state, behavior shaping, decisions, conventions — lives in the repository (`.claude/CLAUDE.md`, `.claude/behavior/`, `.claude/skills/curiosity/`, `history/`). When guidance worth remembering surfaces, it is routed by kind: durable reasoning into `history/decisions.md`, operational rules into `.claude/CLAUDE.md` or `.claude/behavior/`, project workflow into `.claude/skills/curiosity/SKILL.md`. Memory writes never happen in this workspace. Workspace `.claude/CLAUDE.md` carries the operational directive alongside this entry, in the same pattern as SKILL.md's no-GitHub-Issues directive aligned with D-008.
+
+**Reasoning**: Single source of truth (D-003) and cross-machine sync via the workspace repo (D-006, D-008) require all context to be repo-embedded. Memory-tier persistence creates a parallel surface that escapes both — its contents are invisible to git, do not move with the workspace clone, and cannot be reasoned about from inspection of the repository. The same rationale that excluded GitHub Issues (D-008) excludes auto-memory.
+
+**Alternatives**: (1) Use memory selectively for "personal preferences not specific to project context" — rejected because the boundary is fuzzy in practice (the very memory that triggered this decision was project-specific despite being framed as a preference) and clean exclusion is easier to enforce. (2) Use memory but mirror entries into the repo — rejected as duplication that violates single source of truth and creates drift opportunities. (3) Defer the policy until memory caused actual confusion — rejected because the precedent set by D-008 makes the call obvious now.
