@@ -23,6 +23,15 @@ Orientation and agenda-setting happen there per
 - **No unsolicited summaries.** No end-of-turn recap when changes are
   visible.
 
+## Memory
+
+The auto-memory system is not used for this project (D-015). All
+context — user preferences, project state, behavior shaping,
+decisions, conventions — lives in the repository. Guidance worth
+remembering goes into the decisions log (durable reasoning), the
+behavior layer (operational rules), or the skill (project workflow),
+never into memory.
+
 ## Behavior index
 
 - `.claude/behavior/execution.md` — pacing, checkpoint structure,
