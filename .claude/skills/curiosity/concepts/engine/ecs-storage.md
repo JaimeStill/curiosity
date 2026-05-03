@@ -21,3 +21,9 @@ and the scheduler can read and write efficiently against it each frame?
   ECS is the substrate that shared commitment is expressed against.
 - The runtime owns ECS storage lifetime (`design/engine/runtime.md` —
   Resource ownership).
+- Some forms of dense data live outside the ECS rather than as
+  entities and components: voxel data is already a separate inner-tier
+  member (`design/engine/runtime.md` — Inner-tier members, Voxel data
+  paragraph); particle data may be another at scale
+  (`concepts/engine/rendering-primitives.md`). ECS storage strategy is
+  sized for entity-and-component data, not for arbitrary dense data.
