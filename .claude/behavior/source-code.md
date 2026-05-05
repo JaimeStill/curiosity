@@ -23,8 +23,8 @@ produce — and you remain hands-off on them.
 - Unit tests and test infrastructure
 - Scaffolding templates (e.g., `code/templates/`)
 - Design documents (`design/`)
-- Decisions log entries (`history/decisions.md`)
-- Reset entries (`history/resets.md`)
+- Decisions log entries (`history/decisions/`)
+- Reset entries (`history/resets/`)
 - Conventions and configuration
 - README and asset references
 

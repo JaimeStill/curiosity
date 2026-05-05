@@ -65,8 +65,10 @@ The dependency policy applies independently to engine and game code. Game-side d
       engine/<topic>.md                 candidate engine concepts
       game/<topic>.md                   candidate game concepts
     history/
-      decisions.md                      append-only architectural decisions
-      resets.md                         append-only reset transaction summaries
+      decisions/                        append-only architectural decisions
+        D-###.<slug>.md                 one file per decision
+      resets/                           append-only reset transaction summaries
+        R-###.<slug>.md                 one file per reset
     resources/
       assets.md                         curated asset acquisition resources
     code/
@@ -134,23 +136,27 @@ Experiments are time-bounded. An experiment exists only while its job is active.
 
 ## Decisions Log
 
-`history/decisions.md` is append-only. Each entry captures a significant architectural decision at the moment it is made.
+`history/decisions/` is append-only. Each decision is one file named `D-###.<slug>.md`. Numeric prefix preserves chronological scan order in `ls`; slug provides discoverability via filename. No index file — the directory listing is the index.
 
 Entry shape:
 
 ```
-## <date> - <short title>
+# D-### — <short title> — <date>
 
-Scope: engine | game | project
-Context: what situation prompted the decision
-Decision: what was chosen
-Reasoning: why this option over the alternatives considered
-Alternatives: what else was considered and why rejected
+**Scope**: engine | game | project
+
+**Context**: what situation prompted the decision
+
+**Decision**: what was chosen
+
+**Reasoning**: why this option over the alternatives considered
+
+**Alternatives**: what else was considered and why rejected
 ```
 
 The `Scope` field makes it visible at a glance which side of the engine/game line a decision applies to. `project` covers cross-cutting concerns like workflow, tooling, or repository structure.
 
-**Append-only discipline.** Entries are never edited in place. When a decision is reversed or superseded, a new entry is appended that references and supersedes the prior one. The original stays as a historical record. This keeps the log trustworthy as a record of how thinking evolved.
+**Append-only discipline.** Files are never edited in place. When a decision is reversed or superseded, a new file is added that references and supersedes the prior one. The original stays as a historical record. This keeps the log trustworthy as a record of how thinking evolved.
 
 Decisions worth logging include but are not limited to: choice of dependency, inner-tier architectural commitments, file format and protocol decisions, threading and lifecycle models, and any decision the future self will want to reconstruct the reasoning for.
 
@@ -176,21 +182,28 @@ A reset is a bookkeeping transaction that aligns design documentation, concepts,
 
 There is no "completed but still documented" state. That state is the drift this protocol exists to prevent.
 
-**Reset transaction summary.** Appended to `history/resets.md` for each reset. Captures:
+**Reset transaction summary.** Each reset is one file in `history/resets/` named `R-###.<slug>.md`. Same naming and append-only discipline as the decisions log. Captures:
 
 ```
-## <date> — <short title>
+# R-### — <short title> — <date>
 
-Scope: engine | game | project
-Trigger: what prompted the reset
-Integrated: context absorbed into code or implementation, with pointers to source
-Promoted: concepts that became design entries, with traceability to originating concept
-Culled: context removed as obsolete, superseded, or falsified
-        (includes completed experiments)
-Retained: forward-looking context that remains
-Decisions promoted: decisions written to the decisions log during this reset
-Next session focus: concrete description of the next session's target and type
-                    (development | context | experiment)
+**Scope**: engine | game | project
+
+**Trigger**: what prompted the reset
+
+**Integrated**: context absorbed into code or implementation, with pointers to source
+
+**Promoted**: concepts that became design entries, with traceability to originating concept
+
+**Culled**: context removed as obsolete, superseded, or falsified
+            (includes completed experiments)
+
+**Retained**: forward-looking context that remains
+
+**Decisions promoted**: decisions written to the decisions log during this reset
+
+**Next session focus**: concrete description of the next session's target and type
+                        (development | context | experiment)
 ```
 
 Summaries are short. A reset is bookkeeping, not narrative.
@@ -204,7 +217,7 @@ Whenever work is happening in this repository. The discipline applies to:
 - Adding to or modifying any file under `design/` or `concepts/`
 - Promoting a concept to design, or culling a concept
 - Creating, advancing, or removing an experiment under `experiments/`
-- Recording entries in `history/decisions.md` or `history/resets.md`
+- Recording entries in `history/decisions/` or `history/resets/`
 - Evaluating a new dependency
 - Deciding whether a piece of design context has been resolved into code
 - Making architectural decisions about engine, components, or game systems

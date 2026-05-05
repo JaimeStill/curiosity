@@ -1,6 +1,6 @@
 # Reference Game Premise
 
-This document is the aspirational sketch of the reference game — the imagined experience the engine is being built to support. It is short by design and not a specification: mechanism-level material lives in `concepts/game/`, and engine commitments are recorded in `history/decisions.md`. The premise's job is to provide design pressure for engine validation and a coherent target for game-side work, framed in player terms.
+This document is the aspirational sketch of the reference game — the imagined experience the engine is being built to support. It is short by design and not a specification: mechanism-level material lives in `concepts/game/`, and engine commitments are recorded in `history/decisions/`. The premise's job is to provide design pressure for engine validation and a coherent target for game-side work, framed in player terms.
 
 ## Capsule
 
