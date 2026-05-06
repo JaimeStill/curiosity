@@ -110,8 +110,17 @@ My responsibilities engage in coordinated order:
    separate authoring, no drift between the durable record and the
    PR description.
 
-The session is complete once the PR is submitted. Post-PR cleanup
-(merge, branch deletion) is yours.
+   PR creation closes the work the branch is for, not the session.
+   When the branch is single-session, the two coincide and the PR
+   lands at session closeout. When the branch carries multiple
+   sessions toward a single target (experiment branches,
+   multi-phase refactors), commit and push happen per session and
+   the PR is created when the work the branch is for completes.
+
+The session is complete once its commit + push lands. PR
+submission closes the branch's work — at the same closeout for
+single-session branches, at the closing session for multi-session
+branches. Post-PR cleanup (merge, branch deletion) is yours.
 
 ## Pacing and checkpoints
 
