@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"ecs-storage-comparison/archetype"
+	"ecs-storage-comparison/sparsesetmap"
+	"ecs-storage-comparison/sparsesetslice"
 	"ecs-storage-comparison/storage"
 	"ecs-storage-comparison/workload"
 )
@@ -51,6 +53,10 @@ func newBackend(name string) storage.Storage {
 	switch name {
 	case "archetype":
 		return archetype.New()
+	case "sparsesetmap":
+		return sparsesetmap.New()
+	case "sparsesetslice":
+		return sparsesetslice.New()
 	default:
 		fmt.Fprintf(os.Stderr, "unknown backend: %s\n", name)
 		os.Exit(1)

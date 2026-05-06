@@ -55,7 +55,26 @@ ApplyDeferred()                            // applies queued structural changes
    sparse mapping from entity ID to dense index. Single-component
    iteration walks one dense array; multi-component iteration picks a
    driving set and indirects through sparse maps for the others.
-   Structural mutation is dense-array push/pop.
+   Structural mutation is dense-array push/pop. Two variants were
+   measured at iteration-baseline fidelity to isolate the contribution
+   of the sparse-mapping representation:
+   - **Map variant** (`sparsesetmap/`) — `map[EntityID]int` for the
+     sparse mapping. Standard Go primitive; supports any EntityID
+     distribution; per-probe cost includes the map's hash function.
+   - **Slice variant** (`sparsesetslice/`) — `[]int32` indexed by
+     EntityID, sentinel `-1` for absence. Faster per-probe (direct
+     index, no hash); memory cost is O(max EntityID) rather than
+     O(entity count), so it relies on the entity allocator
+     (`concepts/engine/entity-allocator.md`) to keep IDs dense.
+
+   The slice variant carries forward as the active sparse-set backend
+   for remaining workloads. The map variant is preserved as the
+   implementation behind the iteration-baseline measurements (see
+   *Finding*, 2026-05-06) but is not built out further — production
+   sparse-set engines (EnTT and similar) use paged sparse arrays,
+   not hash maps, so its further build-out would carry implementation
+   cost without informational value beyond what the iteration data
+   already captured.
 
 3. **Sparse-set with opt-in groups.** Same as (2) but with explicit
    groups: declared component-set queries that keep their dense arrays
@@ -130,7 +149,8 @@ Single Go module at `experiments/ecs-storage-comparison/`. Package layout:
 
 - `storage/` — type-erased `Storage` and `Iterator` interfaces, `Signature` primitive (uint64 bitmask), generic helpers (`Read[T]`, `Write[T]`, `Attach[T]`, `Detach[T]`, `Spawn1`/`Spawn2`/`Spawn3`, variadic `Spawn`, `ComponentValueFor[T]`).
 - `archetype/` — first backend. Entities grouped by exact component set; per-archetype byte-slice columns; iteration walks signature-matching archetypes via the package-internal `iterator` type.
-- `sparseset/`, `sparsesetgroup/` — backends 2 and 3, to follow.
+- `sparsesetmap/`, `sparsesetslice/` — backend 2 in two variants (map and slice sparse representations); see *Approach > Backends*.
+- `sparsesetgroup/` — backend 3, to follow.
 - `workload/` — workload definitions. Currently iteration baseline (`IterationSetup`, `IterationTick`); others land alongside as needed.
 - `main.go` — flag-driven harness. Constructs the chosen backend, runs the workload's setup, ticks N frames while capturing per-frame timing, writes CSV plus a stdout summary.
 - `results/` — CSV output directory (gitignored).
@@ -145,7 +165,7 @@ go run . -backend=archetype -workload=iteration -scale=1000 -frames=1000
 
 All flags optional; defaults shown above. Valid values:
 
-- `-backend` — `archetype` (others to follow).
+- `-backend` — `archetype | sparsesetmap | sparsesetslice` (`sparsesetgroup` to follow).
 - `-workload` — `iteration` (others to follow).
 - `-scale`, `-frames` — any positive integer.
 - `-out` — output directory (default `results`).
@@ -191,3 +211,35 @@ Peak heap: ~632 KB — dominated by setup (1000 entities × Position + Velocity 
 **Caveat — L1-resident at this scale.** Hot data is ~24 KB (well within the 32 KB L1d cache), so this measurement reflects compute + L1 throughput rather than storage layout. Cross-backend comparison at 1k will be uninformative; the meaningful comparison happens at 10k+ where the working set is L2/L3-resident.
 
 **Status.** Archetype implementation correct, harness producing sane numbers. Sparse-set and sparse-set-with-groups backends pending. Multi-component query, structural churn, attach/detach churn, and mixed workloads pending.
+
+### 2026-05-06 — sparsesetmap + sparsesetslice landed; iteration baseline three-way at 1k/10k/100k
+
+Test machine: same as prior entry (Intel i7-9700K @ 4.9 GHz, 32 KB L1d, 32 GB DDR4).
+
+Per-entity cost (p50 ÷ scale, ns/entity):
+
+| Scale | archetype | sparsesetmap | sparsesetslice |
+|-------|-----------|--------------|----------------|
+| 1k    | 9.03      | 18.87        | 8.94           |
+| 10k   | 8.93      | 23.95        | 8.81           |
+| 100k  | 8.73      | 31.35        | 8.67           |
+
+Distribution at 100k (ns):
+
+| Backend         | min     | p50     | p95     | p99     | max     |
+|-----------------|---------|---------|---------|---------|---------|
+| archetype       |  869764 |  873192 |  919362 | 1087472 | 1125277 |
+| sparsesetmap    | 3034075 | 3135222 | 3283751 | 3408938 | 4127463 |
+| sparsesetslice  |  859645 |  866754 |  914936 | 1000348 | 1044484 |
+
+**Headline.** Sparse representation choice carried the entire iteration gap. sparsesetslice tracks archetype within ~1% across all measured scales; sparsesetmap shows the cache-cliff growth (8.94 → 18.87 → 23.95 → 31.35 ns/entity) that signals hash-probe randomization defeating the prefetcher.
+
+**Why.** The iteration baseline spawns entities 1..N in deterministic order. Driving on Position and walking its `entities` array yields IDs 1, 2, 3, ..., N in sequence. For sparsesetslice, the non-driver probe `Velocity.sparse[entity]` becomes a sequential read into a `[]int32` at positions 1..N — three concurrent sequential streams (driver entities, non-driver sparse, non-driver dense) the prefetcher handles trivially. For sparsesetmap, the hash function within the map's bucket table randomizes the access pattern, breaking prefetch and producing the per-entity cost growth visible at 10k+ where the working set spills out of L1.
+
+**Allocation parity held.** All three backends at 3.00 allocs/frame — the slice literal in workload's `IterationTick`, the per-Query slice (`matches []*archetype` for archetype, `refs []queryRef` for both sparse-set variants), and `&iterator{}`. Bytes/frame divergence (archetype 68.19, both sparse variants 92.19) reflects the queryRef slice carrying twice the per-element width of archetype's `*archetype` matches slice, populated with two refs vs one match.
+
+**Heap profile at 100k.** archetype 7.91 MB, sparsesetmap 10.0 MB, sparsesetslice 5.11 MB. archetype's ~4.8 MB lives in its `locations` map (entity → archetype + row, populated by Spawn) and dominates its overhead; sparse-set has no equivalent at this implementation fidelity because each column tracks its own entities. *Caveat:* a full sparse-set implementation supporting Despawn/Attach/Detach may need similar per-entity tracking, so the heap delta will partially close once those methods land across the backends.
+
+**Implication for the engine decision.** Iteration is no longer the deciding axis between archetype and sparse-set — at least for this workload class with dense ID distributions. The decision shifts to: (a) whether voxel-game ID distributions stay dense, which depends on the entity allocator's recycling behavior (`concepts/engine/entity-allocator.md`); (b) the remaining four workloads — especially attach/detach churn, where sparse-set is structurally expected to win because each column is independent and archetype must move entire rows between archetypes; (c) whether sparsesetslice's iteration parity holds for general queries (multi-component varied workload still pending — the bounds check in `iterator.Next` never fired in the iteration baseline because every entity carried both queried components).
+
+**Status.** All three current backends at iteration-baseline fidelity (Spawn + Query + iterator filled; Despawn / Attach / Detach / Read / Write / ApplyDeferred stubbed). Cross-backend iteration data captured at 1k/10k/100k. **sparsesetmap is culled from further build-out** — its instrumentation purpose (isolating the sparse-mapping representation's contribution to iteration cost) is complete; it does not represent a production sparse-set design (real engines use paged sparse arrays, not hash maps) and the carrying cost of filling stubs and running additional workloads would not buy informational value beyond what today's data captured. Subsequent work targets archetype + sparsesetslice + sparsesetgroup across the remaining four workloads (multi-component query, structural churn, attach/detach churn, mixed) and the remaining six interface methods. Next session: sparsesetgroup at iteration-baseline fidelity.
