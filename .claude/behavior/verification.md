@@ -32,8 +32,12 @@ Verification varies by what was changed. Common cases:
   both.
 
 - **Code change.** Run whatever build/test/lint command applies.
-  In Go: `go build ./...`, `go test ./...`, `go vet ./...`. Don't
-  declare done while the change is unverified by the toolchain.
+  In Go: `go vet ./...` for source verification (D-020 — vet
+  covers the typecheck pass `go build` runs plus static-analysis
+  passes; strictly stronger as a verification check), `go test
+  ./...` for unit tests. `go build ./...` is reserved for cases
+  where the intent is producing a binary artifact. Don't declare
+  done while the change is unverified by the toolchain.
 
 - **Documentation change.** Re-read the modified section in
   context. Confirm it still flows with surrounding content; check

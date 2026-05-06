@@ -76,11 +76,19 @@ ApplyDeferred()                            // applies queued structural changes
    cost without informational value beyond what the iteration data
    already captured.
 
-3. **Sparse-set with opt-in groups.** Same as (2) but with explicit
-   groups: declared component-set queries that keep their dense arrays
-   sorted in lockstep, giving archetype-style iteration locally for the
-   declared queries at the cost of restoring some structural-mutation
-   overhead within the group.
+3. **Sparse-set with opt-in groups** (`sparsesetgroup/`). Same as (2)
+   but with explicit groups: declared component-set queries that keep
+   their dense arrays sorted in lockstep, giving archetype-style
+   iteration locally for the declared queries at the cost of restoring
+   some structural-mutation overhead within the group.
+
+   Owning groups are declared at construction via
+   `New(groups [][]ComponentID)`; the lockstep invariant is maintained
+   on Spawn by swap-into-prefix when a spawn covers a declared group's
+   set. Queries whose set matches a declared group walk the owned
+   prefix without sparse probes (archetype-style locally); queries
+   whose set doesn't match any declared group fall back to slice-style
+   iteration with a per-non-driver sparse probe.
 
 Each backend implements *only enough* to support the workloads.
 Production-grade generality would defeat the experiment's purpose.
@@ -150,7 +158,7 @@ Single Go module at `experiments/ecs-storage-comparison/`. Package layout:
 - `storage/` — type-erased `Storage` and `Iterator` interfaces, `Signature` primitive (uint64 bitmask), generic helpers (`Read[T]`, `Write[T]`, `Attach[T]`, `Detach[T]`, `Spawn1`/`Spawn2`/`Spawn3`, variadic `Spawn`, `ComponentValueFor[T]`).
 - `archetype/` — first backend. Entities grouped by exact component set; per-archetype byte-slice columns; iteration walks signature-matching archetypes via the package-internal `iterator` type.
 - `sparsesetmap/`, `sparsesetslice/` — backend 2 in two variants (map and slice sparse representations); see *Approach > Backends*.
-- `sparsesetgroup/` — backend 3, to follow.
+- `sparsesetgroup/` — backend 3 at iteration-baseline fidelity; see *Approach > Backends*.
 - `workload/` — workload definitions. Currently iteration baseline (`IterationSetup`, `IterationTick`); others land alongside as needed.
 - `main.go` — flag-driven harness. Constructs the chosen backend, runs the workload's setup, ticks N frames while capturing per-frame timing, writes CSV plus a stdout summary.
 - `results/` — CSV output directory (gitignored).
@@ -165,7 +173,7 @@ go run . -backend=archetype -workload=iteration -scale=1000 -frames=1000
 
 All flags optional; defaults shown above. Valid values:
 
-- `-backend` — `archetype | sparsesetmap | sparsesetslice` (`sparsesetgroup` to follow).
+- `-backend` — `archetype | sparsesetmap | sparsesetslice | sparsesetgroup`.
 - `-workload` — `iteration` (others to follow).
 - `-scale`, `-frames` — any positive integer.
 - `-out` — output directory (default `results`).
@@ -243,3 +251,38 @@ Distribution at 100k (ns):
 **Implication for the engine decision.** Iteration is no longer the deciding axis between archetype and sparse-set — at least for this workload class with dense ID distributions. The decision shifts to: (a) whether voxel-game ID distributions stay dense, which depends on the entity allocator's recycling behavior (`concepts/engine/entity-allocator.md`); (b) the remaining four workloads — especially attach/detach churn, where sparse-set is structurally expected to win because each column is independent and archetype must move entire rows between archetypes; (c) whether sparsesetslice's iteration parity holds for general queries (multi-component varied workload still pending — the bounds check in `iterator.Next` never fired in the iteration baseline because every entity carried both queried components).
 
 **Status.** All three current backends at iteration-baseline fidelity (Spawn + Query + iterator filled; Despawn / Attach / Detach / Read / Write / ApplyDeferred stubbed). Cross-backend iteration data captured at 1k/10k/100k. **sparsesetmap is culled from further build-out** — its instrumentation purpose (isolating the sparse-mapping representation's contribution to iteration cost) is complete; it does not represent a production sparse-set design (real engines use paged sparse arrays, not hash maps) and the carrying cost of filling stubs and running additional workloads would not buy informational value beyond what today's data captured. Subsequent work targets archetype + sparsesetslice + sparsesetgroup across the remaining four workloads (multi-component query, structural churn, attach/detach churn, mixed) and the remaining six interface methods. Next session: sparsesetgroup at iteration-baseline fidelity.
+
+### 2026-05-06 — sparsesetgroup landed; iteration baseline four-way at 1k/10k/100k
+
+Test machine: same as prior entries (Intel i7-9700K @ 4.9 GHz, 32 KB L1d, 32 GB DDR4).
+
+Per-entity cost (p50 ÷ scale, ns/entity):
+
+| Scale | archetype | sparsesetmap | sparsesetslice | sparsesetgroup |
+|-------|-----------|--------------|----------------|----------------|
+| 1k    | 9.03      | 18.87        | 8.94           | 7.99           |
+| 10k   | 8.93      | 23.95        | 8.81           | 7.89           |
+| 100k  | 8.73      | 31.35        | 8.67           | 7.87           |
+
+Distribution at 100k (ns):
+
+| Backend         | min     | p50     | p95     | p99     | max     |
+|-----------------|---------|---------|---------|---------|---------|
+| archetype       |  869764 |  873192 |  919362 | 1087472 | 1125277 |
+| sparsesetmap    | 3034075 | 3135222 | 3283751 | 3408938 | 4127463 |
+| sparsesetslice  |  859645 |  866754 |  914936 | 1000348 | 1044484 |
+| sparsesetgroup  |  766480 |  786520 |  830529 |  915605 | 1027965 |
+
+**Headline.** sparsesetgroup runs the iteration baseline ~10–13% faster than both sparsesetslice and archetype across all three scales — measurably the leanest of the four backends on this workload, not the expected ≈-tie. The owning-group fast path skips per-row sparse-side work that even the lucky sparsesetslice case still pays.
+
+**Why.** sparsesetslice's iterator probes the sparse mapping for every non-driver column at every row to resolve the dense index — the bounds check and sentinel test never fire (every entity carries both components in the iteration baseline), but the load-compare-load-store sequence still runs. sparsesetgroup's fast path knows the lockstep invariant holds across every group column at indices [0, g.size), so it writes `index = row` directly without any sparse-side load. Across 100k rows that delta is ~80k ns/frame, matching the measured gap. archetype shows a similar offset against sparsesetgroup, structurally explained by archetype's per-row column-map indirection that the group fast path also avoids.
+
+**Allocation parity held.** sparsesetgroup at 3.00 allocs/frame, ~92.19 bytes/frame — same shape as sparsesetslice (the queryRef slice carries the same per-element width). Allocation profile is not the discriminator at this workload class.
+
+**Heap profile at 100k.** sparsesetgroup 5.01 MB, sparsesetslice 5.11 MB. Difference is within HeapInuse measurement noise — call them equivalent. Both sit ~3 MB below archetype's 7.91 MB, which is still dominated by archetype's `locations` map.
+
+**Caveat — unified iterator pays a small fast-path tax.** sparsesetgroup's iterator writes `refs[i].index = it.row` for every ref on every Next, even on the fast path where row directly equals every column's dense index. A specialized fast-path iterator that exposed `it.row` to Get directly could elide those writes; the unified design pays them to keep Next / Entity / Get coherent across both fast and fallback modes. The advantage over sparsesetslice would be marginally larger with a specialized iterator. The reported numbers reflect what an actually-shipped general-purpose owning-group implementation would look like, not a hand-tuned fast path.
+
+**Implication for the engine decision.** sparsesetgroup's iteration win comes from the lockstep invariant — paid for in Spawn (and, when those workloads land, in Despawn / Attach / Detach as group-eligible entries cross the boundary). The iteration baseline measures the gain in isolation; the maintenance cost shows up only in workloads that mutate group-eligible entities. The remaining four workloads — especially attach/detach churn, where plain sparse-set is structurally cheap and sparsesetgroup must do extra swap work — are where the trade gets measured. Iteration is now decided in groups' favor *for declared queries*; everything else is open.
+
+**Status.** Iteration-baseline row complete across four backends. Six interface methods (Despawn / Attach / Detach / Read / Write / ApplyDeferred) and four workloads (multi-component query, structural churn, attach/detach churn, mixed) remain across three active backends (archetype + sparsesetslice + sparsesetgroup). Multi-component query is the natural next workload — it exercises sparsesetgroup's fast-path/fallback split internally and surfaces the multi-component-archetype-vs-sparse divergence the README's *Question* section flags.

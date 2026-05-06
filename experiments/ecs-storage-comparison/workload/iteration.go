@@ -2,6 +2,15 @@ package workload
 
 import "ecs-storage-comparison/storage"
 
+func IterationGroups() [][]storage.ComponentID {
+	return [][]storage.ComponentID{
+		{
+			storage.ComponentIDFor[Position](),
+			storage.ComponentIDFor[Velocity](),
+		},
+	}
+}
+
 func IterationSetup(s storage.Storage, n int) {
 	for i := range n {
 		storage.Spawn2(
