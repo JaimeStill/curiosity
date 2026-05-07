@@ -99,10 +99,27 @@ Production-grade generality would defeat the experiment's purpose.
    `(Position, Velocity)`; integrate motion every frame. Measures raw
    single-archetype iteration throughput.
 
-2. **Multi-component query.** N entities with varied component sets;
-   query `(Position, Velocity, Health)` over the subset that has all
-   three. Measures multi-component iteration cost — the axis on which
-   archetype and sparse-set diverge most sharply.
+2. **Multi-component query.** N entities with varied component sets,
+   spawned in cycled composition classes (`{P,V,H,Tag}`, `{P,V,H}`,
+   `{P,V,Tag}`, `{P,V}`, `{P,H,Tag}`, `{V,Tag}`) so that archetype's
+   matching set fragments across multiple archetypes and
+   sparse-set's per-row probes fail meaningfully often. Run as two
+   isolated scenarios:
+   - **`multi_full`** — query `{Position, Velocity, Health}`. The
+     queried set equals the declared owning group, so sparsesetgroup
+     takes its fast path; archetype walks the two matching
+     archetypes; sparsesetslice probes both non-driver columns per
+     driver row. Iteration rate: 1/3 of N.
+   - **`multi_partial`** — query `{Position, Velocity}`, a strict
+     subset of the declared group. sparsesetgroup falls back to
+     slice-style traversal (small unified-iterator tax over slice's
+     baseline); archetype walks four matching archetypes;
+     sparsesetslice probes one non-driver column per driver row.
+     Iteration rate: 2/3 of N.
+   Together the two scenarios characterize sparsesetgroup's fast
+   and fallback paths in isolation and surface archetype's
+   multi-archetype-walk cost on the axis the *Question* section
+   flags as the sharpest.
 
 3. **Structural churn.** Spawn and despawn entities per frame at
    varying rates. Measures deferred-command-buffer overhead and
@@ -159,7 +176,7 @@ Single Go module at `experiments/ecs-storage-comparison/`. Package layout:
 - `archetype/` — first backend. Entities grouped by exact component set; per-archetype byte-slice columns; iteration walks signature-matching archetypes via the package-internal `iterator` type.
 - `sparsesetmap/`, `sparsesetslice/` — backend 2 in two variants (map and slice sparse representations); see *Approach > Backends*.
 - `sparsesetgroup/` — backend 3 at iteration-baseline fidelity; see *Approach > Backends*.
-- `workload/` — workload definitions. Currently iteration baseline (`IterationSetup`, `IterationTick`); others land alongside as needed.
+- `workload/` — workload definitions. Iteration baseline (`IterationSetup`, `IterationTick`, `IterationGroups`) and multi-component query (`MultiComponentSetup`, `MultiFullTick`, `MultiPartialTick`, `MultiGroups`); others land alongside as needed.
 - `main.go` — flag-driven harness. Constructs the chosen backend, runs the workload's setup, ticks N frames while capturing per-frame timing, writes CSV plus a stdout summary.
 - `results/` — CSV output directory (gitignored).
 
@@ -174,7 +191,7 @@ go run . -backend=archetype -workload=iteration -scale=1000 -frames=1000
 All flags optional; defaults shown above. Valid values:
 
 - `-backend` — `archetype | sparsesetmap | sparsesetslice | sparsesetgroup`.
-- `-workload` — `iteration` (others to follow).
+- `-workload` — `iteration | multi_full | multi_partial` (others to follow).
 - `-scale`, `-frames` — any positive integer.
 - `-out` — output directory (default `results`).
 
@@ -286,3 +303,60 @@ Distribution at 100k (ns):
 **Implication for the engine decision.** sparsesetgroup's iteration win comes from the lockstep invariant — paid for in Spawn (and, when those workloads land, in Despawn / Attach / Detach as group-eligible entries cross the boundary). The iteration baseline measures the gain in isolation; the maintenance cost shows up only in workloads that mutate group-eligible entities. The remaining four workloads — especially attach/detach churn, where plain sparse-set is structurally cheap and sparsesetgroup must do extra swap work — are where the trade gets measured. Iteration is now decided in groups' favor *for declared queries*; everything else is open.
 
 **Status.** Iteration-baseline row complete across four backends. Six interface methods (Despawn / Attach / Detach / Read / Write / ApplyDeferred) and four workloads (multi-component query, structural churn, attach/detach churn, mixed) remain across three active backends (archetype + sparsesetslice + sparsesetgroup). Multi-component query is the natural next workload — it exercises sparsesetgroup's fast-path/fallback split internally and surfaces the multi-component-archetype-vs-sparse divergence the README's *Question* section flags.
+
+### 2026-05-07 — multi-component query landed; archetype + sparsesetslice + sparsesetgroup at 1k/10k/100k across two scenarios
+
+Test machine: same as prior entries (Intel i7-9700K @ 4.9 GHz, 32 KB L1d, 32 GB DDR4).
+
+Setup: see *Approach > Workloads > 2*. Six composition classes cycled by `i % 6`; iteration rates 1/3 of N for `multi_full`, 2/3 of N for `multi_partial`. sparsesetgroup declares one owning group on `{Position, Velocity, Health}` (shared across both scenarios; only the queried set differs).
+
+Per-entity-of-N cost (p50 ÷ scale, ns):
+
+| Scale | Scenario       | archetype | sparsesetslice | sparsesetgroup |
+|-------|----------------|-----------|----------------|----------------|
+| 1k    | multi_full     | 4.09      | 4.81           | 3.84           |
+| 1k    | multi_partial  | 6.17      | 6.31           | 7.01           |
+| 10k   | multi_full     | 3.96      | 4.71           | 3.67           |
+| 10k   | multi_partial  | 5.95      | 6.18           | 6.98           |
+| 100k  | multi_full     | 3.95      | 4.72           | 3.67           |
+| 100k  | multi_partial  | 5.96      | 6.25           | 6.97           |
+
+Per-iterated-row cost (p50 ÷ rows iterated, ns) at 100k — apples-to-apples against iteration baseline:
+
+| Backend         | iteration (R-008) | multi_full | multi_partial |
+|-----------------|------------------:|-----------:|--------------:|
+| archetype       |              8.73 |      11.85 |          8.93 |
+| sparsesetslice  |              8.67 |      14.15 |          9.37 |
+| sparsesetgroup  |              7.87 |      11.02 |         10.45 |
+
+Distribution at 100k, multi_full (ns):
+
+| Backend         | min    | p50    | p95    | p99    | max    |
+|-----------------|--------|--------|--------|--------|--------|
+| archetype       | 384945 | 395094 | 427371 | 475176 | 604631 |
+| sparsesetslice  | 458139 | 471706 | 509790 | 554784 | 798458 |
+| sparsesetgroup  | 365032 | 367222 | 376459 | 431257 | 472634 |
+
+Distribution at 100k, multi_partial (ns):
+
+| Backend         | min    | p50    | p95    | p99    | max    |
+|-----------------|--------|--------|--------|--------|--------|
+| archetype       | 580535 | 595643 | 631014 | 738601 | 783389 |
+| sparsesetslice  | 615983 | 624731 | 702149 | 728010 | 875637 |
+| sparsesetgroup  | 677183 | 696909 | 742990 | 799971 | 888963 |
+
+**Headline.** The leadership flips between scenarios. `multi_full` (query matches the declared group set): sparsesetgroup leads on its fast path; archetype follows ~7% behind; sparsesetslice trails ~28%. `multi_partial` (query is a strict subset of the declared group): archetype leads outright; sparsesetslice follows ~5% behind; **sparsesetgroup is now slowest at ~17%** behind archetype, paying its fallback path's slice-style probe cost plus the unified-iterator tax R-008's caveat predicted. Per-iterated-row cost rose for every backend versus iteration baseline because varied composition forces real per-row probe work or per-archetype-walk overhead the dense-uniform iteration baseline never exercised.
+
+**Why — multi_full.** archetype walks two matching archetypes (`{P,V,H}` and `{P,V,H,Tag}`); per-iterated-row cost rises 8.73 → 11.85 ns (+36%), part per-archetype-walk overhead, part the third component (`Health`) adding a `Get` and a write per row. sparsesetslice's driver column (Position) covers 5/6 of N entities of which only 2/5 also have both Velocity *and* Health — the other 3/5 fail one or both probes. Per-driver-row probe-and-skip cost is real even when the path skips, accounting for the +63% per-iterated-row jump (8.67 → 14.15 ns). sparsesetgroup's fast path skips all per-row sparse-side work; per-iterated-row cost rises 7.87 → 11.02 ns (same direction as archetype's, attributable to the third component, not to fast-path overhead).
+
+**Why — multi_partial.** archetype walks four matching archetypes (`{P,V}`, `{P,V,Tag}`, `{P,V,H}`, `{P,V,H,Tag}`) and absorbs per-archetype overhead nearly cost-free at the per-iterated level (8.93 vs 8.73, +2%). sparsesetslice pays modest probe-skip overhead (9.37 vs 8.67, +8%) — driver column (P) covers 5/6 of N, of which 4/5 also have V. sparsesetgroup's fallback runs the same shape as sparsesetslice's iteration plus a per-Next mode-flag-based branch — measured tax 10.45 - 9.37 = 1.08 ns/iterated-row, matching R-008's prediction within a fraction of a cycle.
+
+**Allocation parity held.** All three backends at 3.00 allocs/frame across both scenarios. Bytes/frame: 112 for all three on `multi_full`; 108 for archetype and 92 for both sparse-set variants on `multi_partial`. Allocation profile is not the discriminator at this workload class.
+
+**Heap profile at 100k.** archetype 7.62 MB on both scenarios — same `locations`-map dominance as iteration baseline. sparsesetslice 6.11 / 6.00 MB. sparsesetgroup 6.04 / 6.01 MB. Both sparse-set variants sit ~1.6 MB below archetype, a smaller gap than iteration baseline's ~2.8 MB because varied composition adds two more component columns (`Health`, `Tag`) to each sparse-set backend's bookkeeping.
+
+**Caveat — unified-iterator tax is real but small.** sparsesetgroup's ~12% fallback-path slowdown over sparsesetslice (+1.08 ns/iterated-row at 100k `multi_partial`) comes from the dual-mode `Next` carrying a per-call mode-flag check and per-row index writes a specialized fallback iterator would elide. Splitting the iterator into two concrete types behind the existing `Iterator` interface would close most of this gap without flipping the `multi_partial` leaderboard — archetype still leads at 5.96 ns/N versus an optimized sparsesetgroup fallback projected near 6.0 ns/N. This is the smallest, cheapest piece of sparsesetgroup's complexity story, not the largest.
+
+**Implication for the engine decision.** sparsesetgroup's win condition now has a visible shape: leads ~7% on queries matching a declared group, trails ~17% on queries that don't. Whether that's net-positive depends on a hot-query distribution we don't have data for yet. archetype's win condition is broader: no "wrong query" failure mode, multi-archetype walking turned out to be cheap (per-archetype overhead amortized well over matching rows), competitive across both scenarios (won `multi_partial`, lost `multi_full` by ~7%). The complexity comparison extends beyond today's measurement: the six remaining stubbed methods on sparsesetgroup include `Despawn`, `Attach`, `Detach`, all of which must coordinate the lockstep invariant across every group column whenever an entity crosses the owned-prefix boundary — a distributed invariant that breeds subtle bugs in edge cases. archetype's structural-mutation surface (move-between-archetypes) is also non-trivial, but the abstraction is direct: an entity is in exactly one archetype at a time. On a performance ÷ (complexity × ergonomics) axis, archetype's standing strengthens after this workload — competitive on multi-component, no API surface bet on which queries are hot, complexity concentrated in two well-bounded abstractions (archetype management, entity-location tracking). The remaining three workloads (structural churn, attach/detach churn, mixed) — especially attach/detach churn, where sparse-set is structurally cheap and archetype must move entire rows — are where the analysis could still shift.
+
+**Status.** Multi-component query row complete at iteration-baseline + multi-component-query fidelity across the three active backends. Six interface methods (Despawn / Attach / Detach / Read / Write / ApplyDeferred) and three workloads (structural churn, attach/detach churn, mixed) remain. Next workload: structural churn — measures deferred-command-buffer overhead and archetype's move-between-archetypes cost, the latter the axis where sparse-set's column-independent design is structurally expected to win.

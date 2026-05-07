@@ -72,6 +72,10 @@ func selectWorkload(name string) (func(storage.Storage, int), func(storage.Stora
 	switch name {
 	case "iteration":
 		return workload.IterationSetup, workload.IterationTick
+	case "multi_full":
+		return workload.MultiComponentSetup, workload.MultiFullTick
+	case "multi_partial":
+		return workload.MultiComponentSetup, workload.MultiPartialTick
 	default:
 		fmt.Fprintf(os.Stderr, "unknown workload: %s\n", name)
 		os.Exit(1)
@@ -83,6 +87,8 @@ func selectWorkloadGroups(name string) [][]storage.ComponentID {
 	switch name {
 	case "iteration":
 		return workload.IterationGroups()
+	case "multi_full", "multi_partial":
+		return workload.MultiGroups()
 	default:
 		return nil
 	}
