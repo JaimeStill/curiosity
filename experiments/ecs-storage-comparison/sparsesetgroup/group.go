@@ -1,14 +1,14 @@
 package sparsesetgroup
 
-import "ecs-storage-comparison/storage"
+import "ecs-storage-comparison/component"
 
 type group struct {
-	set     []storage.ComponentID
+	set     []component.ID
 	columns []*column
 	size    int
 }
 
-func (g *group) coveredBy(components []storage.ComponentValue) bool {
+func (g *group) coveredBy(components []component.Value) bool {
 	for _, cid := range g.set {
 		found := false
 		for _, cv := range components {
@@ -24,7 +24,7 @@ func (g *group) coveredBy(components []storage.ComponentValue) bool {
 	return true
 }
 
-func (g *group) matches(set []storage.ComponentID) bool {
+func (g *group) matches(set []component.ID) bool {
 	if len(g.set) != len(set) {
 		return false
 	}

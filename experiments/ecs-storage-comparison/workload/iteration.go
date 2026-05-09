@@ -1,12 +1,15 @@
 package workload
 
-import "ecs-storage-comparison/storage"
+import (
+	"ecs-storage-comparison/component"
+	"ecs-storage-comparison/storage"
+)
 
-func IterationGroups() [][]storage.ComponentID {
-	return [][]storage.ComponentID{
+func IterationGroups() [][]component.ID {
+	return [][]component.ID{
 		{
-			storage.ComponentIDFor[Position](),
-			storage.ComponentIDFor[Velocity](),
+			component.IDFor[Position](),
+			component.IDFor[Velocity](),
 		},
 	}
 }
@@ -22,9 +25,9 @@ func IterationSetup(s storage.Storage, n int) {
 }
 
 func IterationTick(s storage.Storage) {
-	posID := storage.ComponentIDFor[Position]()
-	velID := storage.ComponentIDFor[Velocity]()
-	it := s.Query([]storage.ComponentID{posID, velID})
+	posID := component.IDFor[Position]()
+	velID := component.IDFor[Velocity]()
+	it := s.Query([]component.ID{posID, velID})
 	for it.Next() {
 		pos := (*Position)(it.Get(posID))
 		vel := (*Velocity)(it.Get(velID))

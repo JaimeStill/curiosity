@@ -172,12 +172,14 @@ question.
 
 Single Go module at `experiments/ecs-storage-comparison/`. Package layout:
 
-- `storage/` — type-erased `Storage` and `Iterator` interfaces, `Signature` primitive (uint64 bitmask), generic helpers (`Read[T]`, `Write[T]`, `Attach[T]`, `Detach[T]`, `Spawn1`/`Spawn2`/`Spawn3`, variadic `Spawn`, `ComponentValueFor[T]`).
+- `entity/` — entity-identity primitives. `entity.ID` (the entity-identity type), `entity.Allocator` (free-list-based recycler with `Allocate` returning recycled IDs first and `Free` enqueuing them for reuse). Imported by every package that mints or releases entity IDs; depends on nothing experiment-internal.
+- `component/` — component-identity primitives. `component.ID`, `component.InvalidID` sentinel, `component.Value` (id + data carrier), the type→ID registry (`IDFor[T]`, `ValueFor[T]`, `TypeOf`), and `component.Signature` (uint64 bitmask over component IDs with `Set` / `Has` / `Contains` / `SignatureOf`). Depends on nothing experiment-internal.
+- `storage/` — type-erased `Storage` and `Iterator` interfaces (expressed in terms of `entity.ID`, `component.ID`, `component.Value`) and the typed call-site helpers (`Read[T]`, `Write[T]`, `Attach[T]`, `Detach[T]`, `Spawn1`/`Spawn2`/`Spawn3`, variadic `Spawn`). Each backend's `New(alloc *entity.Allocator, …)` constructor receives the allocator that drives `Spawn` and (when Despawn lands) `Free`.
 - `archetype/` — first backend. Entities grouped by exact component set; per-archetype byte-slice columns; iteration walks signature-matching archetypes via the package-internal `iterator` type.
 - `sparsesetmap/`, `sparsesetslice/` — backend 2 in two variants (map and slice sparse representations); see *Approach > Backends*.
-- `sparsesetgroup/` — backend 3 at iteration-baseline fidelity; see *Approach > Backends*.
+- `sparsesetgroup/` — backend 3; see *Approach > Backends*.
 - `workload/` — workload definitions. Iteration baseline (`IterationSetup`, `IterationTick`, `IterationGroups`) and multi-component query (`MultiComponentSetup`, `MultiFullTick`, `MultiPartialTick`, `MultiGroups`); others land alongside as needed.
-- `main.go` — flag-driven harness. Constructs the chosen backend, runs the workload's setup, ticks N frames while capturing per-frame timing, writes CSV plus a stdout summary.
+- `main.go` — flag-driven harness. Constructs the chosen backend (creating its `entity.Allocator` per run), runs the workload's setup, ticks N frames while capturing per-frame timing, writes CSV plus a stdout summary.
 - `results/` — CSV output directory (gitignored).
 
 ### How to run

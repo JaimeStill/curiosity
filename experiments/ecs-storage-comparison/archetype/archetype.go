@@ -4,11 +4,13 @@ import (
 	"slices"
 	"unsafe"
 
+	"ecs-storage-comparison/component"
+	"ecs-storage-comparison/entity"
 	"ecs-storage-comparison/storage"
 )
 
 type column struct {
-	cid  storage.ComponentID
+	cid  component.ID
 	size uintptr
 	data []byte
 }
@@ -18,13 +20,13 @@ func (c *column) appendValue(src unsafe.Pointer) {
 }
 
 type archetype struct {
-	signature storage.Signature
-	cids      []storage.ComponentID
+	signature component.Signature
+	cids      []component.ID
 	columns   []column
-	entities  []storage.EntityID
+	entities  []entity.ID
 }
 
-func (a *archetype) columnFor(cid storage.ComponentID) *column {
+func (a *archetype) columnFor(cid component.ID) *column {
 	for i := range a.cids {
 		if a.cids[i] == cid {
 			return &a.columns[i]
@@ -39,17 +41,18 @@ type location struct {
 }
 
 type Storage struct {
-	archetypes map[storage.Signature]*archetype
-	locations  map[storage.EntityID]location
-	nextID     storage.EntityID
+	archetypes map[component.Signature]*archetype
+	locations  map[entity.ID]location
+	alloc      *entity.Allocator
 }
 
 var _ storage.Storage = (*Storage)(nil)
 
-func New() *Storage {
+func New(alloc *entity.Allocator) *Storage {
 	return &Storage{
-		archetypes: make(map[storage.Signature]*archetype),
-		locations:  make(map[storage.EntityID]location),
+		archetypes: make(map[component.Signature]*archetype),
+		locations:  make(map[entity.ID]location),
+		alloc:      alloc,
 	}
 }
 
@@ -57,29 +60,28 @@ func (s *Storage) ApplyDeferred() {
 	panic("not implemented")
 }
 
-func (s *Storage) Attach(id storage.EntityID, cid storage.ComponentID, data unsafe.Pointer) {
+func (s *Storage) Attach(id entity.ID, cid component.ID, data unsafe.Pointer) {
 	panic("not implemented")
 }
 
-func (s *Storage) Detach(id storage.EntityID, cid storage.ComponentID) {
+func (s *Storage) Detach(id entity.ID, cid component.ID) {
 	panic("not implemented")
 }
 
-func (s *Storage) Despawn(id storage.EntityID) {
+func (s *Storage) Despawn(id entity.ID) {
 	panic("not implemented")
 }
 
-func (s *Storage) Spawn(components []storage.ComponentValue) storage.EntityID {
-	var sig storage.Signature
-	cids := make([]storage.ComponentID, len(components))
+func (s *Storage) Spawn(components []component.Value) entity.ID {
+	var sig component.Signature
+	cids := make([]component.ID, len(components))
 	for i, cv := range components {
 		sig.Set(cv.ID)
 		cids[i] = cv.ID
 	}
 	arch := s.getOrCreateArchetype(sig, cids)
 
-	s.nextID++
-	id := s.nextID
+	id := s.alloc.Allocate()
 	row := len(arch.entities)
 	arch.entities = append(arch.entities, id)
 
@@ -96,8 +98,8 @@ func (s *Storage) Spawn(components []storage.ComponentValue) storage.EntityID {
 	return id
 }
 
-func (s *Storage) Query(set []storage.ComponentID) storage.Iterator {
-	sig := storage.SignatureOf(set)
+func (s *Storage) Query(set []component.ID) storage.Iterator {
+	sig := component.SignatureOf(set)
 	matches := make([]*archetype, 0, len(s.archetypes))
 	for _, a := range s.archetypes {
 		if a.signature.Contains(sig) {
@@ -111,15 +113,15 @@ func (s *Storage) Query(set []storage.ComponentID) storage.Iterator {
 	}
 }
 
-func (s *Storage) Read(id storage.EntityID, cid storage.ComponentID) (unsafe.Pointer, bool) {
+func (s *Storage) Read(id entity.ID, cid component.ID) (unsafe.Pointer, bool) {
 	panic("not implemented")
 }
 
-func (s *Storage) Write(id storage.EntityID, cid storage.ComponentID, data unsafe.Pointer) {
+func (s *Storage) Write(id entity.ID, cid component.ID, data unsafe.Pointer) {
 	panic("not implemented")
 }
 
-func (s *Storage) getOrCreateArchetype(sig storage.Signature, cids []storage.ComponentID) *archetype {
+func (s *Storage) getOrCreateArchetype(sig component.Signature, cids []component.ID) *archetype {
 	if a, ok := s.archetypes[sig]; ok {
 		return a
 	}
@@ -129,7 +131,7 @@ func (s *Storage) getOrCreateArchetype(sig storage.Signature, cids []storage.Com
 	for i, cid := range cids {
 		cols[i] = column{
 			cid:  cid,
-			size: storage.ComponentType(cid).Size(),
+			size: component.TypeOf(cid).Size(),
 			data: nil,
 		}
 	}

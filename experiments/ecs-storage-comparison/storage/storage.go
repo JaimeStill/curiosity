@@ -1,74 +1,39 @@
 package storage
 
 import (
-	"reflect"
 	"unsafe"
+
+	"ecs-storage-comparison/component"
+	"ecs-storage-comparison/entity"
 )
-
-const InvalidComponentID ComponentID = 0
-
-type EntityID uint32
-type ComponentID uint16
-
-type ComponentValue struct {
-	ID   ComponentID
-	Data unsafe.Pointer
-}
 
 type Iterator interface {
 	Next() bool
-	Entity() EntityID
-	Get(cid ComponentID) unsafe.Pointer
+	Entity() entity.ID
+	Get(cid component.ID) unsafe.Pointer
 }
 
 type Storage interface {
-	Spawn(components []ComponentValue) EntityID
-	Despawn(id EntityID)
-	Attach(id EntityID, cid ComponentID, data unsafe.Pointer)
-	Detach(id EntityID, cid ComponentID)
-	Read(id EntityID, cid ComponentID) (unsafe.Pointer, bool)
-	Write(id EntityID, cid ComponentID, data unsafe.Pointer)
-	Query(set []ComponentID) Iterator
+	Attach(id entity.ID, cid component.ID, data unsafe.Pointer)
+	Detach(id entity.ID, cid component.ID)
+	Spawn(components []component.Value) entity.ID
+	Despawn(id entity.ID)
+	Query(set []component.ID) Iterator
+	Read(id entity.ID, cid component.ID) (unsafe.Pointer, bool)
+	Write(id entity.ID, cid component.ID, data unsafe.Pointer)
 	ApplyDeferred()
 }
 
-var (
-	registry = make(map[reflect.Type]ComponentID)
-	types    []reflect.Type
-)
-
-func ComponentIDFor[T any]() ComponentID {
-	t := reflect.TypeFor[T]()
-	if id, ok := registry[t]; ok {
-		return id
-	}
-	id := ComponentID(len(types) + 1)
-	registry[t] = id
-	types = append(types, t)
-	return id
+func Attach[T any](s Storage, id entity.ID, value T) {
+	s.Attach(id, component.IDFor[T](), unsafe.Pointer(&value))
 }
 
-func ComponentValueFor[T any](value *T) ComponentValue {
-	return ComponentValue{ID: ComponentIDFor[T](), Data: unsafe.Pointer(value)}
+func Detach[T any](s Storage, id entity.ID) {
+	s.Detach(id, component.IDFor[T]())
 }
 
-func ComponentType(id ComponentID) reflect.Type {
-	if id == InvalidComponentID || int(id) > len(types) {
-		return nil
-	}
-	return types[id-1]
-}
-
-func Attach[T any](s Storage, id EntityID, value T) {
-	s.Attach(id, ComponentIDFor[T](), unsafe.Pointer(&value))
-}
-
-func Detach[T any](s Storage, id EntityID) {
-	s.Detach(id, ComponentIDFor[T]())
-}
-
-func Read[T any](s Storage, id EntityID) (T, bool) {
-	ptr, ok := s.Read(id, ComponentIDFor[T]())
+func Read[T any](s Storage, id entity.ID) (T, bool) {
+	ptr, ok := s.Read(id, component.IDFor[T]())
 	if !ok {
 		var zero T
 		return zero, false
@@ -76,31 +41,31 @@ func Read[T any](s Storage, id EntityID) (T, bool) {
 	return *(*T)(ptr), true
 }
 
-func Write[T any](s Storage, id EntityID, value T) {
-	s.Write(id, ComponentIDFor[T](), unsafe.Pointer(&value))
+func Write[T any](s Storage, id entity.ID, value T) {
+	s.Write(id, component.IDFor[T](), unsafe.Pointer(&value))
 }
 
-func Spawn(s Storage, components ...ComponentValue) EntityID {
+func Spawn(s Storage, components ...component.Value) entity.ID {
 	return s.Spawn(components)
 }
 
-func Spawn1[A any](s Storage, a A) EntityID {
-	return s.Spawn([]ComponentValue{
-		ComponentValueFor(&a),
+func Spawn1[A any](s Storage, a A) entity.ID {
+	return s.Spawn([]component.Value{
+		component.ValueFor(&a),
 	})
 }
 
-func Spawn2[A, B any](s Storage, a A, b B) EntityID {
-	return s.Spawn([]ComponentValue{
-		ComponentValueFor(&a),
-		ComponentValueFor(&b),
+func Spawn2[A, B any](s Storage, a A, b B) entity.ID {
+	return s.Spawn([]component.Value{
+		component.ValueFor(&a),
+		component.ValueFor(&b),
 	})
 }
 
-func Spawn3[A, B, C any](s Storage, a A, b B, c C) EntityID {
-	return s.Spawn([]ComponentValue{
-		ComponentValueFor(&a),
-		ComponentValueFor(&b),
-		ComponentValueFor(&c),
+func Spawn3[A, B, C any](s Storage, a A, b B, c C) entity.ID {
+	return s.Spawn([]component.Value{
+		component.ValueFor(&a),
+		component.ValueFor(&b),
+		component.ValueFor(&c),
 	})
 }

@@ -1,13 +1,16 @@
 package workload
 
-import "ecs-storage-comparison/storage"
+import (
+	"ecs-storage-comparison/component"
+	"ecs-storage-comparison/storage"
+)
 
-func MultiGroups() [][]storage.ComponentID {
-	return [][]storage.ComponentID{
+func MultiGroups() [][]component.ID {
+	return [][]component.ID{
 		{
-			storage.ComponentIDFor[Position](),
-			storage.ComponentIDFor[Velocity](),
-			storage.ComponentIDFor[Health](),
+			component.IDFor[Position](),
+			component.IDFor[Velocity](),
+			component.IDFor[Health](),
 		},
 	}
 }
@@ -18,10 +21,10 @@ func MultiComponentSetup(s storage.Storage, n int) {
 		case 0:
 			storage.Spawn(
 				s,
-				storage.ComponentValueFor(&Position{X: float32(i)}),
-				storage.ComponentValueFor(&Velocity{Y: 1}),
-				storage.ComponentValueFor(&Health{Current: 100, Max: 100}),
-				storage.ComponentValueFor(&Tag{}),
+				component.ValueFor(&Position{X: float32(i)}),
+				component.ValueFor(&Velocity{Y: 1}),
+				component.ValueFor(&Health{Current: 100, Max: 100}),
+				component.ValueFor(&Tag{}),
 			)
 		case 1:
 			storage.Spawn3(s, Position{X: float32(i)}, Velocity{Y: 1}, Health{Current: 100, Max: 100})
@@ -38,10 +41,10 @@ func MultiComponentSetup(s storage.Storage, n int) {
 }
 
 func MultiFullTick(s storage.Storage) {
-	posID := storage.ComponentIDFor[Position]()
-	velID := storage.ComponentIDFor[Velocity]()
-	healthID := storage.ComponentIDFor[Health]()
-	it := s.Query([]storage.ComponentID{posID, velID, healthID})
+	posID := component.IDFor[Position]()
+	velID := component.IDFor[Velocity]()
+	healthID := component.IDFor[Health]()
+	it := s.Query([]component.ID{posID, velID, healthID})
 	for it.Next() {
 		pos := (*Position)(it.Get(posID))
 		vel := (*Velocity)(it.Get(velID))
@@ -54,9 +57,9 @@ func MultiFullTick(s storage.Storage) {
 }
 
 func MultiPartialTick(s storage.Storage) {
-	posID := storage.ComponentIDFor[Position]()
-	velID := storage.ComponentIDFor[Velocity]()
-	it := s.Query([]storage.ComponentID{posID, velID})
+	posID := component.IDFor[Position]()
+	velID := component.IDFor[Velocity]()
+	it := s.Query([]component.ID{posID, velID})
 	for it.Next() {
 		pos := (*Position)(it.Get(posID))
 		vel := (*Velocity)(it.Get(velID))

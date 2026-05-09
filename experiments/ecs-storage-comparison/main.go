@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"ecs-storage-comparison/archetype"
+	"ecs-storage-comparison/component"
+	"ecs-storage-comparison/entity"
 	"ecs-storage-comparison/sparsesetgroup"
 	"ecs-storage-comparison/sparsesetmap"
 	"ecs-storage-comparison/sparsesetslice"
@@ -51,16 +53,17 @@ func main() {
 	}
 }
 
-func newBackend(name string, groups [][]storage.ComponentID) storage.Storage {
+func newBackend(name string, groups [][]component.ID) storage.Storage {
+	alloc := entity.NewAllocator()
 	switch name {
 	case "archetype":
-		return archetype.New()
+		return archetype.New(alloc)
 	case "sparsesetgroup":
-		return sparsesetgroup.New(groups)
+		return sparsesetgroup.New(alloc, groups)
 	case "sparsesetmap":
-		return sparsesetmap.New()
+		return sparsesetmap.New(alloc)
 	case "sparsesetslice":
-		return sparsesetslice.New()
+		return sparsesetslice.New(alloc)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown backend: %s\n", name)
 		os.Exit(1)
@@ -83,7 +86,7 @@ func selectWorkload(name string) (func(storage.Storage, int), func(storage.Stora
 	}
 }
 
-func selectWorkloadGroups(name string) [][]storage.ComponentID {
+func selectWorkloadGroups(name string) [][]component.ID {
 	switch name {
 	case "iteration":
 		return workload.IterationGroups()

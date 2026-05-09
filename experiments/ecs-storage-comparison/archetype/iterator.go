@@ -3,7 +3,8 @@ package archetype
 import (
 	"unsafe"
 
-	"ecs-storage-comparison/storage"
+	"ecs-storage-comparison/component"
+	"ecs-storage-comparison/entity"
 )
 
 type iterator struct {
@@ -21,11 +22,11 @@ func (it *iterator) Next() bool {
 	return it.index < len(it.matches)
 }
 
-func (it *iterator) Entity() storage.EntityID {
+func (it *iterator) Entity() entity.ID {
 	return it.matches[it.index].entities[it.row]
 }
 
-func (it *iterator) Get(cid storage.ComponentID) unsafe.Pointer {
+func (it *iterator) Get(cid component.ID) unsafe.Pointer {
 	arch := it.matches[it.index]
 	col := arch.columnFor(cid)
 	return unsafe.Pointer(&col.data[uintptr(it.row)*col.size])

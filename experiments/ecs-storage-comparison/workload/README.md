@@ -15,8 +15,8 @@ the dispatch uniform.
 ## Components
 
 The package defines four component types, registered with the
-storage layer's component-ID registry on first reference
-(`storage.ComponentIDFor[T]()`). The same Position / Velocity /
+`component` package's type registry on first reference
+(`component.IDFor[T]()`). The same Position / Velocity /
 Health / Tag IDs are reused across every workload.
 
 - **`Position`** (`X, Y, Z float32`, 12 bytes) — simulation state.
@@ -152,8 +152,8 @@ backend:
 ## Group declarations
 
 Each workload's `*Groups()` function returns the owning groups passed
-to `sparsesetgroup.New(groups)` at construction. The harness wires
-these in through `selectWorkloadGroups`.
+to `sparsesetgroup.New(alloc, groups)` at construction. The harness
+wires these in through `selectWorkloadGroups`.
 
 | Workload      | Declared groups                  |
 |---------------|----------------------------------|

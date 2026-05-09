@@ -23,11 +23,11 @@ A column's `sparse` field is a Go map instead of a slice:
 
 ```
 type column struct {
-    cid      storage.ComponentID
+    cid      component.ID
     size     uintptr
-    sparse   map[storage.EntityID]int
+    sparse   map[entity.ID]int
     dense    []byte
-    entities []storage.EntityID
+    entities []entity.ID
 }
 ```
 

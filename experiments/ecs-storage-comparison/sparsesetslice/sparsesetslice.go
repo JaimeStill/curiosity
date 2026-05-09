@@ -3,37 +3,40 @@ package sparsesetslice
 import (
 	"unsafe"
 
+	"ecs-storage-comparison/component"
+	"ecs-storage-comparison/entity"
 	"ecs-storage-comparison/storage"
 )
 
 type column struct {
-	cid      storage.ComponentID
+	cid      component.ID
 	size     uintptr
 	sparse   []int32
 	dense    []byte
-	entities []storage.EntityID
+	entities []entity.ID
 }
 
 func (c *column) appendValue(src unsafe.Pointer) {
 	c.dense = append(c.dense, unsafe.Slice((*byte)(src), c.size)...)
 }
 
-func (c *column) ensureSparseCapacity(id storage.EntityID) {
+func (c *column) ensureSparseCapacity(id entity.ID) {
 	for len(c.sparse) <= int(id) {
 		c.sparse = append(c.sparse, -1)
 	}
 }
 
 type Storage struct {
-	columns map[storage.ComponentID]*column
-	nextID  storage.EntityID
+	columns map[component.ID]*column
+	alloc   *entity.Allocator
 }
 
 var _ storage.Storage = (*Storage)(nil)
 
-func New() *Storage {
+func New(alloc *entity.Allocator) *Storage {
 	return &Storage{
-		columns: make(map[storage.ComponentID]*column),
+		columns: make(map[component.ID]*column),
+		alloc:   alloc,
 	}
 }
 
@@ -41,21 +44,20 @@ func (s *Storage) ApplyDeferred() {
 	panic("not implemented")
 }
 
-func (s *Storage) Attach(id storage.EntityID, cid storage.ComponentID, data unsafe.Pointer) {
+func (s *Storage) Attach(id entity.ID, cid component.ID, data unsafe.Pointer) {
 	panic("not implemented")
 }
 
-func (s *Storage) Detach(id storage.EntityID, cid storage.ComponentID) {
+func (s *Storage) Detach(id entity.ID, cid component.ID) {
 	panic("not implemented")
 }
 
-func (s *Storage) Despawn(id storage.EntityID) {
+func (s *Storage) Despawn(id entity.ID) {
 	panic("not implemented")
 }
 
-func (s *Storage) Spawn(components []storage.ComponentValue) storage.EntityID {
-	s.nextID++
-	id := s.nextID
+func (s *Storage) Spawn(components []component.Value) entity.ID {
+	id := s.alloc.Allocate()
 	for _, cv := range components {
 		c := s.getOrCreateColumn(cv.ID)
 		c.ensureSparseCapacity(id)
@@ -66,15 +68,15 @@ func (s *Storage) Spawn(components []storage.ComponentValue) storage.EntityID {
 	return id
 }
 
-func (s *Storage) Read(id storage.EntityID, cid storage.ComponentID) (unsafe.Pointer, bool) {
+func (s *Storage) Read(id entity.ID, cid component.ID) (unsafe.Pointer, bool) {
 	panic("not implemented")
 }
 
-func (s *Storage) Write(id storage.EntityID, cid storage.ComponentID, data unsafe.Pointer) {
+func (s *Storage) Write(id entity.ID, cid component.ID, data unsafe.Pointer) {
 	panic("not implemented")
 }
 
-func (s *Storage) Query(set []storage.ComponentID) storage.Iterator {
+func (s *Storage) Query(set []component.ID) storage.Iterator {
 	refs := make([]queryRef, len(set))
 	driver := 0
 	for i, cid := range set {
@@ -94,13 +96,13 @@ func (s *Storage) Query(set []storage.ComponentID) storage.Iterator {
 	}
 }
 
-func (s *Storage) getOrCreateColumn(cid storage.ComponentID) *column {
+func (s *Storage) getOrCreateColumn(cid component.ID) *column {
 	if c, ok := s.columns[cid]; ok {
 		return c
 	}
 	c := &column{
 		cid:  cid,
-		size: storage.ComponentType(cid).Size(),
+		size: component.TypeOf(cid).Size(),
 	}
 	s.columns[cid] = c
 	return c

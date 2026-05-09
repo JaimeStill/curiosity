@@ -199,11 +199,11 @@ workload-specific shortcut.
 
 ## Construction
 
-`New(groups [][]ComponentID)` declares the owning groups up-front and
-materializes the participating columns immediately. After `New`
-returns, group state is fixed; Spawn maintains the lockstep invariant
-from the first call forward, with no retroactive-materialization
-path.
+`New(alloc *entity.Allocator, groups [][]component.ID)` declares the
+owning groups up-front and materializes the participating columns
+immediately. After `New` returns, group state is fixed; Spawn
+maintains the lockstep invariant from the first call forward, with
+no retroactive-materialization path.
 
 Declaration-at-construction matches what production owning-group
 implementations (EnTT) do. Auto-declaring on first Query was

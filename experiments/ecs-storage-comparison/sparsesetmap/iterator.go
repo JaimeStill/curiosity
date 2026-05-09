@@ -3,7 +3,8 @@ package sparsesetmap
 import (
 	"unsafe"
 
-	"ecs-storage-comparison/storage"
+	"ecs-storage-comparison/component"
+	"ecs-storage-comparison/entity"
 )
 
 type queryRef struct {
@@ -29,13 +30,13 @@ NextRow:
 		if it.row >= len(driverCol.entities) {
 			return false
 		}
-		entity := driverCol.entities[it.row]
+		eid := driverCol.entities[it.row]
 		for i := range it.refs {
 			if i == it.driver {
 				it.refs[i].index = it.row
 				continue
 			}
-			index, present := it.refs[i].col.sparse[entity]
+			index, present := it.refs[i].col.sparse[eid]
 			if !present {
 				continue NextRow
 			}
@@ -45,11 +46,11 @@ NextRow:
 	}
 }
 
-func (it *iterator) Entity() storage.EntityID {
+func (it *iterator) Entity() entity.ID {
 	return it.refs[it.driver].col.entities[it.row]
 }
 
-func (it *iterator) Get(cid storage.ComponentID) unsafe.Pointer {
+func (it *iterator) Get(cid component.ID) unsafe.Pointer {
 	for _, ref := range it.refs {
 		if ref.col.cid == cid {
 			return unsafe.Pointer(

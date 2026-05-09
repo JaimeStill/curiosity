@@ -76,17 +76,19 @@ at the data level.
 
 Top-level state:
 
-- `archetypes map[Signature]*archetype` — every archetype the
-  backend has seen, keyed by its signature.
-- `locations map[EntityID]location` — entity → (archetype pointer,
+- `archetypes map[component.Signature]*archetype` — every archetype
+  the backend has seen, keyed by its signature.
+- `locations map[entity.ID]location` — entity → (archetype pointer,
   row), so Read/Write can find any entity's data without scanning
   archetypes.
-- `nextID EntityID` — monotonic entity-ID counter.
+- `alloc *entity.Allocator` — shared entity-ID allocator (free-list
+  recycler). Spawn calls `alloc.Allocate()`; Despawn (when it lands)
+  will call `alloc.Free(id)` after the row is removed.
 
-`Signature` is a `uint64` bitmask — each ComponentID is a bit
-position. `Set(cid)` flips the bit; `Contains(other)` is a bitmask
-superset check. The 64-bit width caps component types at 64, which
-suffices for this experiment.
+`component.Signature` is a `uint64` bitmask — each `component.ID`
+is a bit position. `Set(cid)` flips the bit; `Contains(other)` is a
+bitmask superset check. The 64-bit width caps component types at 64,
+which suffices for this experiment.
 
 ## How iteration works
 
@@ -127,8 +129,8 @@ For each spawn:
 2. Find or create the archetype for that signature
    (`getOrCreateArchetype`). New archetypes get sorted `cids` and
    one column per component with the size pre-resolved from
-   `reflect.Type.Size()`.
-3. Allocate a new EntityID.
+   `component.TypeOf(cid).Size()`.
+3. Mint a new entity ID via `s.alloc.Allocate()`.
 4. Append the entity to the archetype's `entities`; append each
    component's bytes to its column's `data`.
 5. Record the entity's location as `(archetype, row)` for later
