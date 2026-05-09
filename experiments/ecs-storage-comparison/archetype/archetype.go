@@ -44,6 +44,7 @@ type Storage struct {
 	archetypes map[component.Signature]*archetype
 	locations  map[entity.ID]location
 	alloc      *entity.Allocator
+	despawned  []entity.ID
 }
 
 var _ storage.Storage = (*Storage)(nil)
@@ -57,7 +58,10 @@ func New(alloc *entity.Allocator) *Storage {
 }
 
 func (s *Storage) ApplyDeferred() {
-	panic("not implemented")
+	for _, id := range s.despawned {
+		s.applyDespawn(id)
+	}
+	s.despawned = s.despawned[:0]
 }
 
 func (s *Storage) Attach(id entity.ID, cid component.ID, data unsafe.Pointer) {
@@ -69,7 +73,7 @@ func (s *Storage) Detach(id entity.ID, cid component.ID) {
 }
 
 func (s *Storage) Despawn(id entity.ID) {
-	panic("not implemented")
+	s.despawned = append(s.despawned, id)
 }
 
 func (s *Storage) Spawn(components []component.Value) entity.ID {
@@ -119,6 +123,33 @@ func (s *Storage) Read(id entity.ID, cid component.ID) (unsafe.Pointer, bool) {
 
 func (s *Storage) Write(id entity.ID, cid component.ID, data unsafe.Pointer) {
 	panic("not implemented")
+}
+
+func (s *Storage) applyDespawn(id entity.ID) {
+	loc := s.locations[id]
+	arch := loc.arch
+	lastRow := len(arch.entities) - 1
+
+	if loc.row != lastRow {
+		movedID := arch.entities[lastRow]
+		arch.entities[loc.row] = movedID
+		for i := range arch.columns {
+			col := &arch.columns[i]
+			dst := uintptr(loc.row) * col.size
+			src := uintptr(lastRow) * col.size
+			copy(col.data[dst:dst+col.size], col.data[src:src+col.size])
+		}
+		s.locations[movedID] = location{arch: arch, row: loc.row}
+	}
+
+	arch.entities = arch.entities[:lastRow]
+	for i := range arch.columns {
+		col := &arch.columns[i]
+		col.data = col.data[:uintptr(lastRow)*col.size]
+	}
+
+	delete(s.locations, id)
+	s.alloc.Free(id)
 }
 
 func (s *Storage) getOrCreateArchetype(sig component.Signature, cids []component.ID) *archetype {

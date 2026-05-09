@@ -39,10 +39,27 @@ func (c *column) swapDenseRows(i, j int32) {
 	}
 }
 
+func (c *column) swapRemove(id entity.ID) {
+	r := int(c.sparse[id])
+	lastRow := len(c.entities) - 1
+	if r != lastRow {
+		movedID := c.entities[lastRow]
+		c.entities[r] = movedID
+		dst := uintptr(r) * c.size
+		src := uintptr(lastRow) * c.size
+		copy(c.dense[dst:dst+c.size], c.dense[src:src+c.size])
+		c.sparse[movedID] = int32(r)
+	}
+	c.entities = c.entities[:lastRow]
+	c.dense = c.dense[:uintptr(lastRow)*c.size]
+	c.sparse[id] = -1
+}
+
 type Storage struct {
-	columns map[component.ID]*column
-	groups  []*group
-	alloc   *entity.Allocator
+	columns   map[component.ID]*column
+	groups    []*group
+	alloc     *entity.Allocator
+	despawned []entity.ID
 }
 
 var _ storage.Storage = (*Storage)(nil)
@@ -66,7 +83,10 @@ func New(alloc *entity.Allocator, groups [][]component.ID) *Storage {
 }
 
 func (s *Storage) ApplyDeferred() {
-	panic("not implemented")
+	for _, id := range s.despawned {
+		s.applyDespawn(id)
+	}
+	s.despawned = s.despawned[:0]
 }
 
 func (s *Storage) Attach(id entity.ID, cid component.ID, data unsafe.Pointer) {
@@ -78,7 +98,7 @@ func (s *Storage) Detach(id entity.ID, cid component.ID) {
 }
 
 func (s *Storage) Despawn(id entity.ID) {
-	panic("not implemented")
+	s.despawned = append(s.despawned, id)
 }
 
 func (s *Storage) Spawn(components []component.Value) entity.ID {
@@ -151,6 +171,36 @@ func (s *Storage) Read(id entity.ID, cid component.ID) (unsafe.Pointer, bool) {
 
 func (s *Storage) Write(id entity.ID, cid component.ID, data unsafe.Pointer) {
 	panic("not implemented")
+}
+
+func (s *Storage) applyDespawn(id entity.ID) {
+	for _, g := range s.groups {
+		c0 := g.columns[0]
+		if int(id) >= len(c0.sparse) {
+			continue
+		}
+		r := c0.sparse[id]
+		if r < 0 || r >= int32(g.size) {
+			continue
+		}
+		boundary := int32(g.size - 1)
+		if r != boundary {
+			other := c0.entities[boundary]
+			for _, c := range g.columns {
+				c.entities[r], c.entities[boundary] = c.entities[boundary], c.entities[r]
+				c.swapDenseRows(r, boundary)
+				c.sparse[id] = boundary
+				c.sparse[other] = r
+			}
+		}
+		g.size--
+	}
+	for _, c := range s.columns {
+		if int(id) < len(c.sparse) && c.sparse[id] != -1 {
+			c.swapRemove(id)
+		}
+	}
+	s.alloc.Free(id)
 }
 
 func (s *Storage) getOrCreateColumn(cid component.ID) *column {

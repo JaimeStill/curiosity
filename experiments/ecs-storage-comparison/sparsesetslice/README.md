@@ -137,6 +137,8 @@ sequential-ID iteration also stays prefetcher-friendly with the slice
 form (three concurrent sequential streams the prefetcher handles
 trivially).
 
-Memory cost is O(max EntityID), not O(entity count). That matters
-once Despawn lands and recycled-vs-monotonic ID strategy comes into
-play; see `concepts/engine/entity-allocator.md`.
+Memory cost is O(max EntityID), not O(entity count). Despawn returns
+IDs to `entity.Allocator`'s free list (Spawn pulls recycled IDs
+first), so max EntityID stays close to peak live count rather than
+growing with cumulative spawns. Generations and compaction remain
+forward-looking; see `concepts/engine/entity-allocator.md`.

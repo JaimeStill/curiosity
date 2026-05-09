@@ -82,8 +82,8 @@ Top-level state:
   row), so Read/Write can find any entity's data without scanning
   archetypes.
 - `alloc *entity.Allocator` — shared entity-ID allocator (free-list
-  recycler). Spawn calls `alloc.Allocate()`; Despawn (when it lands)
-  will call `alloc.Free(id)` after the row is removed.
+  recycler). Spawn calls `alloc.Allocate()`; Despawn calls
+  `alloc.Free(id)` after the row's swap-remove completes.
 
 `component.Signature` is a `uint64` bitmask — each `component.ID`
 is a bit position. `Set(cid)` flips the bit; `Contains(other)` is a
