@@ -121,9 +121,29 @@ Production-grade generality would defeat the experiment's purpose.
    multi-archetype-walk cost on the axis the *Question* section
    flags as the sharpest.
 
-3. **Structural churn.** Spawn and despawn entities per frame at
-   varying rates. Measures deferred-command-buffer overhead and
-   archetype-move cost.
+3. **Structural churn.** Three population models exercise the
+   deferred-mutation surface and storage-side structural cost
+   independently. Each tick performs K = scale/100 structural ops;
+   `ApplyDeferred` runs once per tick. Component shape matches the
+   multi-component owning group: every spawned entity carries
+   `{Position, Velocity, Health}`. sparsesetgroup declares one
+   owning group on the same set.
+   - **`structural_steady`** — spawn N up front; each tick despawn
+     K and spawn K (FIFO via a head index over a workload-tracked
+     alive list). Steady-state population at tick boundaries;
+     isolates pair-mutation cost at fixed working-set size.
+   - **`structural_cycle`** — start empty; alternate phases. Grow
+     phase: spawn K each tick until population ≥ target. Drain
+     phase: despawn K each tick (FIFO) until population reaches 0,
+     then reset and flip back to grow. Population swings 0 ↔ N,
+     exercising spawn-only and despawn-only directions in
+     isolation.
+   - **`structural_growth`** — start empty; spawn K each tick,
+     never despawn. Population grows monotonically; isolates
+     spawn-only storage growth without despawn signal.
+   Together the three scenarios separate spawn-only, despawn-only,
+   and balanced-pair structural cost so per-direction signal isn't
+   averaged across asymmetric phases.
 
 4. **Attach/detach churn.** Existing entities gain or lose components
    per frame. Measures archetype-move cost specifically: sparse-set
@@ -178,7 +198,7 @@ Single Go module at `experiments/ecs-storage-comparison/`. Package layout:
 - `archetype/` — first backend. Entities grouped by exact component set; per-archetype byte-slice columns; iteration walks signature-matching archetypes via the package-internal `iterator` type.
 - `sparsesetmap/`, `sparsesetslice/` — backend 2 in two variants (map and slice sparse representations); see *Approach > Backends*.
 - `sparsesetgroup/` — backend 3; see *Approach > Backends*.
-- `workload/` — workload definitions. Iteration baseline (`IterationSetup`, `IterationTick`, `IterationGroups`) and multi-component query (`MultiComponentSetup`, `MultiFullTick`, `MultiPartialTick`, `MultiGroups`); others land alongside as needed.
+- `workload/` — workload definitions. Iteration baseline (`IterationSetup`, `IterationTick`, `IterationGroups`), multi-component query (`MultiComponentSetup`, `MultiFullTick`, `MultiPartialTick`, `MultiGroups`), and structural churn (`StructuralSteadySetup`/`Tick`, `StructuralCycleSetup`/`Tick`, `StructuralGrowthSetup`/`Tick`, `StructuralGroups`); others land alongside as needed.
 - `main.go` — flag-driven harness. Constructs the chosen backend (creating its `entity.Allocator` per run), runs the workload's setup, ticks N frames while capturing per-frame timing, writes CSV plus a stdout summary.
 - `results/` — CSV output directory (gitignored).
 
@@ -193,7 +213,7 @@ go run . -backend=archetype -workload=iteration -scale=1000 -frames=1000
 All flags optional; defaults shown above. Valid values:
 
 - `-backend` — `archetype | sparsesetmap | sparsesetslice | sparsesetgroup`.
-- `-workload` — `iteration | multi_full | multi_partial` (others to follow).
+- `-workload` — `iteration | multi_full | multi_partial | structural_steady | structural_cycle | structural_growth` (attach/detach churn and mixed to follow).
 - `-scale`, `-frames` — any positive integer.
 - `-out` — output directory (default `results`).
 
@@ -362,3 +382,100 @@ Distribution at 100k, multi_partial (ns):
 **Implication for the engine decision.** sparsesetgroup's win condition now has a visible shape: leads ~7% on queries matching a declared group, trails ~17% on queries that don't. Whether that's net-positive depends on a hot-query distribution we don't have data for yet. archetype's win condition is broader: no "wrong query" failure mode, multi-archetype walking turned out to be cheap (per-archetype overhead amortized well over matching rows), competitive across both scenarios (won `multi_partial`, lost `multi_full` by ~7%). The complexity comparison extends beyond today's measurement: the six remaining stubbed methods on sparsesetgroup include `Despawn`, `Attach`, `Detach`, all of which must coordinate the lockstep invariant across every group column whenever an entity crosses the owned-prefix boundary — a distributed invariant that breeds subtle bugs in edge cases. archetype's structural-mutation surface (move-between-archetypes) is also non-trivial, but the abstraction is direct: an entity is in exactly one archetype at a time. On a performance ÷ (complexity × ergonomics) axis, archetype's standing strengthens after this workload — competitive on multi-component, no API surface bet on which queries are hot, complexity concentrated in two well-bounded abstractions (archetype management, entity-location tracking). The remaining three workloads (structural churn, attach/detach churn, mixed) — especially attach/detach churn, where sparse-set is structurally cheap and archetype must move entire rows — are where the analysis could still shift.
 
 **Status.** Multi-component query row complete at iteration-baseline + multi-component-query fidelity across the three active backends. Six interface methods (Despawn / Attach / Detach / Read / Write / ApplyDeferred) and three workloads (structural churn, attach/detach churn, mixed) remain. Next workload: structural churn — measures deferred-command-buffer overhead and archetype's move-between-archetypes cost, the latter the axis where sparse-set's column-independent design is structurally expected to win.
+
+### 2026-05-09 — structural churn landed across three population models; archetype `locations` map → ID-indexed slice mid-session
+
+Test machine: same as prior entries (Intel i7-9700K @ 4.9 GHz, 32 KB L1d, 32 GB DDR4).
+
+Setup: see *Approach > Workloads > 3*. Three population models (`structural_steady`, `structural_cycle`, `structural_growth`) each tick K = scale/100 structural ops with `ApplyDeferred` once per tick. Component shape matches the multi-component owning group (`{Position, Velocity, Health}`); sparsesetgroup declares one owning group on the same set.
+
+This session ran in two phases. The pre-pivot phase landed `Despawn` + `ApplyDeferred` against archetype's existing `locations map[entity.ID]location` and surfaced a clear cost gap at 100k driven by that map. The post-pivot phase replaced the map with an ID-indexed `[]location` (D-026) and re-measured. Both data sets are reported here so the swap's effect is visible in place.
+
+#### Pre-pivot — archetype with `locations` as map
+
+Per-frame cost (p50, ns):
+
+| Scale | Workload          | archetype | sparsesetslice | sparsesetgroup |
+|-------|-------------------|-----------|----------------|----------------|
+| 1k    | structural_steady |     2,480 |          2,566 |          2,932 |
+| 1k    | structural_cycle  |     1,694 |          1,807 |          1,871 |
+| 1k    | structural_growth |     1,801 |          1,827 |          1,911 |
+| 10k   | structural_steady |    26,024 |         25,982 |         29,961 |
+| 10k   | structural_cycle  |    17,485 |         17,691 |         18,768 |
+| 10k   | structural_growth |    20,984 |         19,474 |         19,984 |
+| 100k  | structural_steady |   311,801 |        261,890 |        305,503 |
+| 100k  | structural_cycle  |   188,561 |        101,534 |        119,588 |
+| 100k  | structural_growth |   314,887 |        190,004 |        203,705 |
+
+Peak heap at 100k, `structural_growth`: archetype 143 MB, sparsesetslice 93 MB, sparsesetgroup 83 MB. End-of-run population is ~1.1M entities; component data accounts for ~35 MB; sparseset overhead (dense + sparse + entity-ID slices) totals ~50-60 MB; archetype's overhead is ~100 MB, of which the `locations map[entity.ID]location` dominates (~80 bytes/entry × ~1M = ~80 MB).
+
+**Pre-pivot headline.** Archetype trails sparsesetslice by 18-65% on every structural workload at 100k. Per-spawn cost climbs with population for archetype (180 → 210 → 315 ns/op for growth across 1k/10k/100k); sparsesets stay flat (~190 ns/op at all scales). The divergence at scale isn't architectural — it's the cost of archetype's `locations` map's bucket overhead and per-insert hash work at 1M-entry scale.
+
+D-025's scan-all-columns despawn choice in sparseset (`sparsesetslice` and `sparsesetgroup` Phase B) was vindicated at 3-column shape: sparsesetslice's per-op cost is competitive with archetype's at 100k cycle (102 ns/op vs 189 ns/op pre-pivot), proving the scan isn't dominating at this width. Sparsesetgroup's lockstep tax (R-008's prediction) shows here too: 5-15% slower than slice across every workload × scale combination, paying the prefix-maintenance cost in every tick whether or not iteration reaps the win.
+
+#### Post-pivot — archetype with `locations` as ID-indexed slice (D-026)
+
+Per-frame cost (p50, ns) — only archetype changed; sparseset values repeated for direct comparison:
+
+| Scale | Workload          | archetype pre | archetype post | sparsesetslice | sparsesetgroup |
+|-------|-------------------|--------------:|---------------:|---------------:|---------------:|
+| 1k    | structural_steady |         2,480 |          1,841 |          2,566 |          2,932 |
+| 1k    | structural_cycle  |         1,694 |          1,549 |          1,807 |          1,871 |
+| 1k    | structural_growth |         1,801 |          1,601 |          1,827 |          1,911 |
+| 10k   | structural_steady |        26,024 |         18,360 |         25,982 |         29,961 |
+| 10k   | structural_cycle  |        17,485 |         15,451 |         17,691 |         18,768 |
+| 10k   | structural_growth |        20,984 |         16,419 |         19,474 |         19,984 |
+| 100k  | structural_steady |       311,801 |        184,291 |        261,890 |        305,503 |
+| 100k  | structural_cycle  |       188,561 |         82,884 |        101,534 |        119,588 |
+| 100k  | structural_growth |       314,887 |        166,870 |        190,004 |        203,705 |
+
+Distribution at 100k, `structural_growth` (post-pivot, ns):
+
+| Backend         |     min |     p50 |     p95 |       p99 |        max |
+|-----------------|--------:|--------:|--------:|----------:|-----------:|
+| archetype       | 158,433 | 166,870 | 388,174 | 2,271,142 | 17,751,643 |
+| sparsesetslice  | 183,909 | 190,004 | 307,109 | 2,148,461 |  8,786,877 |
+| sparsesetgroup  | 196,599 | 203,705 | 313,347 | 2,836,262 | 10,132,070 |
+
+#### Iteration + multi-component re-runs after the swap
+
+Iteration baseline and multi-component query were re-measured to confirm the swap doesn't regress hot-path cost (those workloads spawn only at setup; their measured loops never hit `locations`). Per-frame p50 timings change within noise (≤2% across all nine cells). Heap profile changes meaningfully:
+
+Peak heap at 100k (MB):
+
+| Workload      | archetype pre | archetype post |     Δ | sparsesetslice |
+|---------------|--------------:|---------------:|------:|---------------:|
+| iteration     |          7.91 |           5.64 | -29%  |           5.11 |
+| multi_full    |          7.62 |           5.76 | -24%  |           6.11 |
+| multi_partial |          7.62 |           5.76 | -24%  |           6.00 |
+
+Archetype's heap at 100k now sits at parity with sparsesetslice's across iteration, multi-component, and structural workloads. The ~4.8 MB locations-map overhead R-008 attributed to archetype is gone — replaced by ~1.6 MB of ID-indexed slice (1M × 16 bytes).
+
+#### Headline
+
+The swap closes both the heap gap and the structural-mutation cost gap that pre-pivot data had attributed to archetype. Post-pivot leadership at 100k:
+
+- `structural_steady` — archetype leads sparsesetslice by 30%, sparsesetgroup by 40%.
+- `structural_cycle` — archetype leads sparsesetslice by 18%, sparsesetgroup by 31%.
+- `structural_growth` — archetype leads sparsesetslice by 12%, sparsesetgroup by 18%.
+
+Sparsesetgroup's lockstep tax stays visible at every scale on every structural workload (5-15% slower than slice). The cost is paid in spawn (swap-into-prefix) and despawn (Phase A boundary swap) regardless of whether the workload's query mix would reap the iteration-side win.
+
+#### Why archetype's structural cost dropped so sharply
+
+Per-op cost decomposition. Each spawn pays one `locations` write (and grow-if-needed); each despawn-apply pays three `locations` accesses (read for the despawned ID, read for the swapped-in ID, write to update the swapped-in ID's row, sentinel-set on the despawned slot). Pre-pivot: each map op was a hash + bucket walk + (occasional) rehash, climbing in cost as the map grew toward 1M entries. Post-pivot: each op is a direct slice index and write — constant-time, cache-friendly, no hashing.
+
+Heap-side: Go's map carries ~80 bytes/entry of internal overhead; the slice carries 16 bytes/entry. At 1M entries that's ~80 MB → ~16 MB for the locations data alone, with the rest of the post-pivot heap reduction coming from the lower GC pressure that follows from fewer per-spawn map-bucket allocations.
+
+#### Implication for the engine decision
+
+The cumulative storage-strategy picture has shifted noticeably. Pre-R-012, R-009's analysis leaned archetype on a "performance ÷ (complexity × ergonomics)" basis primarily because archetype was competitive on multi-component query and had no "wrong-query failure mode." That reading is now stronger: archetype is *leading* on structural mutation across all three population models at 100k, with heap profile in line with sparsesetslice. Sparsesetgroup retains its iteration win on declared-group queries and its multi_full lead, but it now consistently trails on every workload that doesn't reap that fast path.
+
+What remains open:
+- *Attach/detach churn* (next session). Sparseset is structurally expected to win this — column-independent updates vs archetype's row-move between archetypes. If sparseset's expected lead surfaces here, it begins to balance archetype's structural-mutation lead.
+- *Wider component shapes.* This session used a 3-column entity shape (matches multi-component owning group). D-025's scan-all-columns despawn would face a sterner test at 8-12 columns; whether the scan cost begins to dominate sparseset's structural advantage on wider shapes is the natural follow-up if attach/detach data motivates it.
+- *Mixed workload* (final workload). Closer to a real per-frame workload mix; will test how the per-axis leaders behave when their costs are interleaved.
+
+#### Status
+
+Structural-churn row complete across the three active backends at three scales, in two phases (pre-pivot map / post-pivot slice). Six of nine `Storage` interface methods landed (Spawn / Despawn / Query / ApplyDeferred + iteration's iterator state); Read / Write / Attach / Detach remain stubbed across the three active backends. `sparsesetmap` retains its R-007 culled status (panic-stubbed Despawn / ApplyDeferred). Two workloads remain: attach/detach churn and mixed. Decision logged: D-026 (`locations` map → ID-indexed slice). Next workload: attach/detach churn — exercises the four currently stubbed interface methods and tests sparseset's structurally expected win on column-independent component churn.

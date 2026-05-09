@@ -79,6 +79,12 @@ func selectWorkload(name string) (func(storage.Storage, int), func(storage.Stora
 		return workload.MultiComponentSetup, workload.MultiFullTick
 	case "multi_partial":
 		return workload.MultiComponentSetup, workload.MultiPartialTick
+	case "structural_steady":
+		return workload.StructuralSteadySetup, workload.StructuralSteadyTick
+	case "structural_cycle":
+		return workload.StructuralCycleSetup, workload.StructuralCycleTick
+	case "structural_growth":
+		return workload.StructuralGrowthSetup, workload.StructuralGrowthTick
 	default:
 		fmt.Fprintf(os.Stderr, "unknown workload: %s\n", name)
 		os.Exit(1)
@@ -92,6 +98,8 @@ func selectWorkloadGroups(name string) [][]component.ID {
 		return workload.IterationGroups()
 	case "multi_full", "multi_partial":
 		return workload.MultiGroups()
+	case "structural_steady", "structural_cycle", "structural_growth":
+		return workload.StructuralGroups()
 	default:
 		return nil
 	}

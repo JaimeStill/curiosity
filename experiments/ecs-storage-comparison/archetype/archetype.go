@@ -42,7 +42,7 @@ type location struct {
 
 type Storage struct {
 	archetypes map[component.Signature]*archetype
-	locations  map[entity.ID]location
+	locations  []location
 	alloc      *entity.Allocator
 	despawned  []entity.ID
 }
@@ -52,7 +52,6 @@ var _ storage.Storage = (*Storage)(nil)
 func New(alloc *entity.Allocator) *Storage {
 	return &Storage{
 		archetypes: make(map[component.Signature]*archetype),
-		locations:  make(map[entity.ID]location),
 		alloc:      alloc,
 	}
 }
@@ -95,6 +94,9 @@ func (s *Storage) Spawn(components []component.Value) entity.ID {
 			appendValue(cv.Data)
 	}
 
+	if grow := int(id) + 1; grow > len(s.locations) {
+		s.locations = slices.Grow(s.locations, grow-len(s.locations))[:grow]
+	}
 	s.locations[id] = location{
 		arch: arch,
 		row:  row,
@@ -148,7 +150,7 @@ func (s *Storage) applyDespawn(id entity.ID) {
 		col.data = col.data[:uintptr(lastRow)*col.size]
 	}
 
-	delete(s.locations, id)
+	s.locations[id] = location{}
 	s.alloc.Free(id)
 }
 

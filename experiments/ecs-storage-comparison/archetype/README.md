@@ -78,9 +78,14 @@ Top-level state:
 
 - `archetypes map[component.Signature]*archetype` — every archetype
   the backend has seen, keyed by its signature.
-- `locations map[entity.ID]location` — entity → (archetype pointer,
-  row), so Read/Write can find any entity's data without scanning
-  archetypes.
+- `locations []location` — entity → (archetype pointer, row),
+  indexed directly by `int(id)`. Sentinel `arch == nil` marks empty
+  slots; `slices.Grow` expands capacity when a spawned entity's ID
+  exceeds current length. Reuses the dense-ID guarantee from the
+  entity allocator's free-list recycler — the same assumption
+  sparsesetslice's `[]int32` sparse mappings carry. Despawn-apply,
+  Read, and Write can find any entity's data without scanning
+  archetypes (D-026).
 - `alloc *entity.Allocator` — shared entity-ID allocator (free-list
   recycler). Spawn calls `alloc.Allocate()`; Despawn calls
   `alloc.Free(id)` after the row's swap-remove completes.
@@ -136,10 +141,13 @@ For each spawn:
 5. Record the entity's location as `(archetype, row)` for later
    lookup.
 
-Per-spawn cost is dominated by the signature computation (one bit
-set per component) and the archetype-table lookup (map keyed on
-signature). The lookup is O(1) average; the signature is constant
-work for a fixed component count.
+Per-spawn cost decomposes into the signature computation (one bit
+set per component), the archetype-table lookup (`archetypes` map
+keyed on signature, O(1) average), the column-data appends (one per
+component), and the location-slice write (direct index into
+`s.locations[id]`, with occasional `slices.Grow` capacity expansion
+when an ID exceeds current length). All four are constant work for
+a fixed component count and dense-ID input.
 
 Within a single archetype, Spawn is a simple dense append. Structural
 mutation that *crosses* archetype boundaries — when Attach or Detach
