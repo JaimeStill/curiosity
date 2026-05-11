@@ -31,11 +31,12 @@ post-session planning discussion that closes the prior session.
 In plan mode at the start of a session, two things happen before we
 exit it:
 
-1. **Orient.** Read the most recent entry in `history/resets.md` to
-   see where the prior session left things — what was integrated,
-   what was promoted, what was culled, what remains forward-looking,
-   and what the prior session named as the next session's focus and
-   type. Load relevant skill content.
+1. **Orient.** Read the most recent file in `history/resets/` (sorted
+   lexically by filename — the highest `R-###.<slug>.md`) to see where
+   the prior session left things — what was integrated, what was
+   promoted, what was culled, what remains forward-looking, and what
+   the prior session named as the next session's focus and type. Load
+   relevant skill content.
 
 2. **Scope.** Lay out the session agenda — type, target, and a token
    budget that leaves headroom against context rot while still
@@ -83,10 +84,11 @@ My responsibilities engage in coordinated order:
    discussion produces the to-do list for the remaining closeout
    steps.
 
-4. **Decisions log.** Append entries to
-   `.claude/skills/curiosity/history/decisions.md` for any
-   architectural decisions surfaced during the session, in the shape
-   defined in `SKILL.md`'s Decisions Log section.
+4. **Decisions log.** Add new entries to
+   `.claude/skills/curiosity/history/decisions/` (one file per decision,
+   `D-###.<slug>.md`) for any architectural decisions surfaced during
+   the session, in the shape defined in `SKILL.md`'s Decisions Log
+   section.
 
 5. **Documentation and context artifacts.** Apply the outcomes from
    step 3 against the planning surface: update `design/` and
@@ -96,10 +98,10 @@ My responsibilities engage in coordinated order:
    embeds a decision recorded in step 4, this is the step that lands
    that change.
 
-6. **Reset entry.** Append a reset entry to
-   `.claude/skills/curiosity/history/resets.md` using the shape
-   defined in `SKILL.md`'s Reset Protocol section, including the
-   `Next session focus` field set from step 3.
+6. **Reset entry.** Add a new file to
+   `.claude/skills/curiosity/history/resets/` (`R-###.<slug>.md`) using
+   the shape defined in `SKILL.md`'s Reset Protocol section, including
+   the `Next session focus` field set from step 3.
 
 7. **Commit / push / PR.** Ask before committing. Commit message
    follows the style in `~/.claude/CLAUDE.md`: imperative subject,
@@ -108,8 +110,17 @@ My responsibilities engage in coordinated order:
    separate authoring, no drift between the durable record and the
    PR description.
 
-The session is complete once the PR is submitted. Post-PR cleanup
-(merge, branch deletion) is yours.
+   PR creation closes the work the branch is for, not the session.
+   When the branch is single-session, the two coincide and the PR
+   lands at session closeout. When the branch carries multiple
+   sessions toward a single target (experiment branches,
+   multi-phase refactors), commit and push happen per session and
+   the PR is created when the work the branch is for completes.
+
+The session is complete once its commit + push lands. PR
+submission closes the branch's work — at the same closeout for
+single-session branches, at the closing session for multi-session
+branches. Post-PR cleanup (merge, branch deletion) is yours.
 
 ## Pacing and checkpoints
 

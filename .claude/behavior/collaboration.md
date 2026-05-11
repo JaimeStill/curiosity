@@ -58,8 +58,8 @@ This applies especially in this workspace, where the design and
 history directories are the substance of the project. A stray
 file in `design/engine/` may be your in-progress draft from
 another session. A branch I didn't create may be your active
-work. An entry I don't recognize in `decisions.md` is part of
-the record.
+work. A file I don't recognize in `history/decisions/` or
+`history/resets/` is part of the record.
 
 The test before any destructive action: do I understand what
 this is and why it exists? If not, I ask before acting. The

@@ -62,6 +62,14 @@ Defined at the consumer site, not the producer site. Implementations are unexpor
 
 **Inner-tier divergence.** Hot-path code prefers concrete types and value receivers over interface dispatch. Reach for interfaces only when polymorphism actually pays in measurable runtime terms. A struct method call is cheaper than an interface call; the inner tier respects that.
 
+**Compile-time satisfaction assertion.** When a type implements an interface, declare a typed-nil assertion at the type's definition site:
+
+```go
+var _ storage.Storage = (*Storage)(nil)
+```
+
+This locks the satisfaction at compile time — the build fails at the assertion line, not at remote call sites that try to use the interface. Justified by Go's implicit interface implementation: without the assertion, accidental method-set drift is only caught when something downstream tries the assignment. Habit-grade discipline; one line per type.
+
 References:
 - `~/tau/format/format.go:10-22` — `Format` interface (3 methods)
 - `~/tau/provider/provider.go:14-39` — `Provider` interface (6 methods)
@@ -203,6 +211,7 @@ Lifecycle and shutdown are coordinated via cancel-context plus `sync.WaitGroup`.
 
 Modern idioms used throughout:
 - `sync.WaitGroup.Go(fn)` (Go 1.22+) instead of manual `wg.Add(1)` + `go fn()` + `wg.Done()`.
+- `for i := range n` (Go 1.22+) instead of C-style `for i := 0; i < n; i++` for integer ranges.
 - `slog` for structured logging, with module-scoped loggers passed through constructors.
 - `maps.Clone()` and `maps.Copy()` for map handling.
 - UUIDv7 for time-sortable identifiers.
@@ -291,9 +300,35 @@ No Makefile mandate. `mise.toml` is permitted (herald uses it for dev tasks like
 
 No enforced `.golangci.yml` at this stage. `gofmt` and `go vet` are the baseline. Linter configuration is revisited when the engine repository is established and we have measurable signal about what lint rules add value.
 
+Use `go vet ./...` for build-state validation; reserve `go build` for when producing a binary is the explicit goal. Vet performs the type-checking that `go build` does (it has to in order to analyze the program) without binary emission. This keeps the iteration loop tight and avoids polluting working trees with stray binaries.
+
 `go.work` lives at the engine root only. Per-module `go.mod` pins Go version. CHANGELOG.md per module follows semantic versioning and the per-release format documented in `code/templates/CHANGELOG.md.tmpl`.
 
-## 16. What this does NOT cover
+## 16. Slice ownership
+
+Slices passed across API boundaries carry an implicit ownership-transfer question that Go's type system doesn't surface. The discriminator is whether the caller may continue to hold the slice after the call.
+
+**Defensive cloning at API boundaries.** When a function receives a slice that the caller may still hold or mutate after the call, clone before any in-place mutation:
+
+```go
+sortedCIDs := slices.Clone(cids)
+slices.Sort(sortedCIDs)
+```
+
+This applies to public API surface and to any function whose contract permits the caller to retain its slice. The cost (one allocation per call) is justified by the safety against caller-aliased state.
+
+**In-place mutation for internal helpers consuming a transient slice.** When a helper is called only by code that built the slice specifically to be transferred — and the calling code does not use the slice after the helper returns — sort or store in place:
+
+```go
+slices.Sort(cids)
+arch.cids = cids
+```
+
+The discriminator: is the slice's purpose to be consumed by this call, or might the caller still hold it? Internal helpers consuming a transient slice are the second case; everything else is the first.
+
+When in doubt, clone. The alternative — silent caller-aliased state corruption — is hard to localize and easy to introduce.
+
+## 17. What this does NOT cover
 
 The following are decided per sub-project, not at the workspace conventions level:
 

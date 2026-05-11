@@ -4,7 +4,7 @@ The runtime is the inner-tier host. It owns the frame loop, schedules
 inner-tier work, and brokers the contract that lets outer-tier
 components plug in without reaching into inner-tier internals. This
 document is forward-looking reference material — claims grounded in
-`history/decisions.md` (especially D-002), in source code, or in hard
+`history/decisions/` (especially D-002), in source code, or in hard
 external constraints. Material that is not yet settled lives under
 `concepts/engine/`, not here.
 
@@ -29,7 +29,7 @@ The test, applied to a candidate subsystem:
 
 A subsystem that flips from outer to inner is a workflow event, not
 just an implementation event: the move is recorded in
-`history/decisions.md` and the relevant inner-tier internals are
+`history/decisions/` and the relevant inner-tier internals are
 revisited rather than wedged through the existing contract.
 
 ## Inner-tier members
