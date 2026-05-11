@@ -40,11 +40,24 @@ type location struct {
 	row  int
 }
 
+type attachComponent struct {
+	id   entity.ID
+	cid  component.ID
+	data []byte
+}
+
+type detachComponent struct {
+	id  entity.ID
+	cid component.ID
+}
+
 type Storage struct {
 	archetypes map[component.Signature]*archetype
 	locations  []location
 	alloc      *entity.Allocator
 	despawned  []entity.ID
+	attached   []attachComponent
+	detached   []detachComponent
 }
 
 var _ storage.Storage = (*Storage)(nil)
@@ -60,15 +73,26 @@ func (s *Storage) ApplyDeferred() {
 	for _, id := range s.despawned {
 		s.applyDespawn(id)
 	}
+	for _, op := range s.detached {
+		s.applyDetach(op)
+	}
+	for _, op := range s.attached {
+		s.applyAttach(op)
+	}
 	s.despawned = s.despawned[:0]
+	s.detached = s.detached[:0]
+	s.attached = s.attached[:0]
 }
 
 func (s *Storage) Attach(id entity.ID, cid component.ID, data unsafe.Pointer) {
-	panic("not implemented")
+	size := component.TypeOf(cid).Size()
+	buf := make([]byte, size)
+	copy(buf, unsafe.Slice((*byte)(data), size))
+	s.attached = append(s.attached, attachComponent{id: id, cid: cid, data: buf})
 }
 
 func (s *Storage) Detach(id entity.ID, cid component.ID) {
-	panic("not implemented")
+	s.detached = append(s.detached, detachComponent{id: id, cid: cid})
 }
 
 func (s *Storage) Despawn(id entity.ID) {
@@ -120,38 +144,111 @@ func (s *Storage) Query(set []component.ID) storage.Iterator {
 }
 
 func (s *Storage) Read(id entity.ID, cid component.ID) (unsafe.Pointer, bool) {
-	panic("not implemented")
+	if int(id) >= len(s.locations) {
+		return nil, false
+	}
+	loc := s.locations[id]
+	if loc.arch == nil {
+		return nil, false
+	}
+	col := loc.arch.columnFor(cid)
+	if col == nil {
+		return nil, false
+	}
+	return unsafe.Pointer(&col.data[uintptr(loc.row)*col.size]), true
 }
 
 func (s *Storage) Write(id entity.ID, cid component.ID, data unsafe.Pointer) {
-	panic("not implemented")
+	if int(id) >= len(s.locations) {
+		return
+	}
+	loc := s.locations[id]
+	if loc.arch == nil {
+		return
+	}
+	col := loc.arch.columnFor(cid)
+	if col == nil {
+		return
+	}
+	dst := uintptr(loc.row) * col.size
+	copy(col.data[dst:dst+col.size], unsafe.Slice((*byte)(data), col.size))
 }
 
 func (s *Storage) applyDespawn(id entity.ID) {
 	loc := s.locations[id]
-	arch := loc.arch
-	lastRow := len(arch.entities) - 1
-
-	if loc.row != lastRow {
-		movedID := arch.entities[lastRow]
-		arch.entities[loc.row] = movedID
-		for i := range arch.columns {
-			col := &arch.columns[i]
-			dst := uintptr(loc.row) * col.size
-			src := uintptr(lastRow) * col.size
-			copy(col.data[dst:dst+col.size], col.data[src:src+col.size])
-		}
-		s.locations[movedID] = location{arch: arch, row: loc.row}
-	}
-
-	arch.entities = arch.entities[:lastRow]
-	for i := range arch.columns {
-		col := &arch.columns[i]
-		col.data = col.data[:uintptr(lastRow)*col.size]
-	}
-
+	s.swapRemove(loc.arch, loc.row)
 	s.locations[id] = location{}
 	s.alloc.Free(id)
+}
+
+func (s *Storage) applyAttach(op attachComponent) {
+	loc := s.locations[op.id]
+	oldArch := loc.arch
+
+	if existing := oldArch.columnFor(op.cid); existing != nil {
+		dst := uintptr(loc.row) * existing.size
+		copy(existing.data[dst:dst+existing.size], op.data)
+		return
+	}
+
+	newSig := oldArch.signature
+	newSig.Set(op.cid)
+	newCids := make([]component.ID, len(oldArch.cids)+1)
+	copy(newCids, oldArch.cids)
+	newCids[len(oldArch.cids)] = op.cid
+
+	newArch := s.getOrCreateArchetype(newSig, newCids)
+	newRow := len(newArch.entities)
+	newArch.entities = append(newArch.entities, op.id)
+
+	for i := range oldArch.columns {
+		oldCol := &oldArch.columns[i]
+		newCol := newArch.columnFor(oldCol.cid)
+		oldOff := uintptr(loc.row) * oldCol.size
+		newCol.data = append(newCol.data, oldCol.data[oldOff:oldOff+oldCol.size]...)
+	}
+
+	newCol := newArch.columnFor(op.cid)
+	newCol.data = append(newCol.data, op.data...)
+
+	s.swapRemove(oldArch, loc.row)
+	s.locations[op.id] = location{arch: newArch, row: newRow}
+}
+
+func (s *Storage) applyDetach(op detachComponent) {
+	loc := s.locations[op.id]
+	oldArch := loc.arch
+
+	if oldArch.columnFor(op.cid) == nil {
+		return
+	}
+
+	var newSig component.Signature
+	newCids := make([]component.ID, 0, len(oldArch.cids)-1)
+	for _, cid := range oldArch.cids {
+		if cid == op.cid {
+			continue
+		}
+		newSig.Set(cid)
+		newCids = append(newCids, cid)
+	}
+
+	newArch := s.getOrCreateArchetype(newSig, newCids)
+	newRow := len(newArch.entities)
+	newArch.entities = append(newArch.entities, op.id)
+
+	for i := range oldArch.columns {
+		oldCol := &oldArch.columns[i]
+		if oldCol.cid == op.cid {
+			continue
+		}
+		newCol := newArch.columnFor(oldCol.cid)
+		oldOff := uintptr(loc.row) * oldCol.size
+		newCol.data = append(newCol.data, oldCol.data[oldOff:oldOff+oldCol.size]...)
+	}
+
+	s.swapRemove(oldArch, loc.row)
+	s.locations[op.id] = location{arch: newArch, row: newRow}
 }
 
 func (s *Storage) getOrCreateArchetype(sig component.Signature, cids []component.ID) *archetype {
@@ -176,4 +273,24 @@ func (s *Storage) getOrCreateArchetype(sig component.Signature, cids []component
 	}
 	s.archetypes[sig] = a
 	return a
+}
+
+func (s *Storage) swapRemove(arch *archetype, row int) {
+	lastRow := len(arch.entities) - 1
+	if row != lastRow {
+		movedID := arch.entities[lastRow]
+		arch.entities[row] = movedID
+		for i := range arch.columns {
+			col := &arch.columns[i]
+			dst := uintptr(row) * col.size
+			src := uintptr(lastRow) * col.size
+			copy(col.data[dst:dst+col.size], col.data[src:src+col.size])
+		}
+		s.locations[movedID] = location{arch: arch, row: row}
+	}
+	arch.entities = arch.entities[:lastRow]
+	for i := range arch.columns {
+		col := &arch.columns[i]
+		col.data = col.data[:uintptr(lastRow)*col.size]
+	}
 }

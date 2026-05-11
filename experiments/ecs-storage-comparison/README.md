@@ -479,3 +479,107 @@ What remains open:
 #### Status
 
 Structural-churn row complete across the three active backends at three scales, in two phases (pre-pivot map / post-pivot slice). Six of nine `Storage` interface methods landed (Spawn / Despawn / Query / ApplyDeferred + iteration's iterator state); Read / Write / Attach / Detach remain stubbed across the three active backends. `sparsesetmap` retains its R-007 culled status (panic-stubbed Despawn / ApplyDeferred). Two workloads remain: attach/detach churn and mixed. Decision logged: D-026 (`locations` map → ID-indexed slice). Next workload: attach/detach churn — exercises the four currently stubbed interface methods and tests sparseset's structurally expected win on column-independent component churn.
+
+### 2026-05-11 — attach/detach + mixed completing the workload row; D-027 logs the engine-storage decision
+
+Test machine: same as prior entries (Intel i7-9700K @ 4.9 GHz, 32 KB L1d, 32 GB DDR4).
+
+This session landed the final two workloads (attach/detach churn and mixed) and the four remaining interface methods (`Attach`, `Detach`, `Read`, `Write`) across the three active backends, completing the workload row and producing the cumulative evidence for the engine-storage decision logged as D-027.
+
+#### Setup
+
+**Attach/detach churn.** Base/decorated two-class composition: half of N entities spawn at setup with `{P}`, half with `{P, V, H}`. Each tick: K = N/100 base entities are promoted to decorated (`Attach Velocity`, `Attach Health`); K decorated entities are demoted to base (`Detach Velocity`, `Detach Health`); every surviving entity has its Position read and written (`p.X++`) to keep the per-entity Read/Write path warm. `ApplyDeferred` once per tick. Bookkeeping: two FIFO slices with slice-trim-on-front + append-on-back; promote and demote operate on the oldest K of each.
+
+**Mixed.** Same base/decorated composition but with base carrying `{P, V}` so the integration query matches every alive entity. Each tick: `Query {P, V}` integrating `pos += vel` over N entities; `Query {P, V, H}` decrementing Health over N/2 decorated entities; Despawn K oldest base; Spawn K new base; Promote K base → decorated (Attach Health); Demote K decorated → base (Detach Health); `ApplyDeferred`. Steady-state population at N total.
+
+Both workloads declare the same owning group `{P, V, H}` for sparsesetgroup, matching the multi-component and structural-churn workloads' owning group declaration.
+
+#### Per-frame cost — attach/detach (p50, ns)
+
+| Scale | archetype | sparsesetslice | sparsesetgroup |
+|-------|----------:|---------------:|---------------:|
+| 1k    |    61,146 |         86,644 |         92,832 |
+| 10k   |   613,734 |        886,630 |        866,951 |
+| 100k  | 6,238,274 |      8,841,357 |      8,758,382 |
+
+Distribution at 100k (ns):
+
+| Backend         |       min |       p50 |       p95 |       p99 |        max |
+|-----------------|----------:|----------:|----------:|----------:|-----------:|
+| archetype       | 5,926,070 | 6,238,274 | 6,550,788 | 6,739,423 |  6,847,229 |
+| sparsesetslice  | 8,499,588 | 8,841,357 | 9,088,514 | 9,238,318 | 15,580,008 |
+| sparsesetgroup  | 8,452,420 | 8,758,382 | 9,088,000 | 9,229,757 |  9,973,059 |
+
+Allocations: ~1040/frame at 1k → ~104,000/frame at 100k for sparseset backends; archetype runs ~4% higher (~1080 → ~108,000) from per-cross-boundary `newCids` and signature work in `applyAttach` and `applyDetach`. Bytes/frame scales similarly; archetype carries ~2.4 bytes/entity of structural overhead.
+
+Peak heap at 100k: archetype 11.6 MB, sparsesetslice 7.4 MB, sparsesetgroup 7.3 MB. Archetype's ~60% overhead reflects steady-state duplicated column data across the `{P}` and `{P, V, H}` archetype tables plus the ID-indexed `locations` slice; the sparseset backends keep one column per component regardless of composition.
+
+#### Per-frame cost — mixed (p50, ns)
+
+| Scale | archetype | sparsesetslice | sparsesetgroup |
+|-------|----------:|---------------:|---------------:|
+| 1k    |    14,420 |         15,679 |         15,764 |
+| 10k   |   140,593 |        154,522 |        153,832 |
+| 100k  | 1,420,759 |      1,547,681 |      1,545,807 |
+
+Distribution at 100k (ns):
+
+| Backend         |       min |       p50 |       p95 |       p99 |       max |
+|-----------------|----------:|----------:|----------:|----------:|----------:|
+| archetype       | 1,365,358 | 1,420,759 | 1,563,734 | 1,722,804 | 2,120,570 |
+| sparsesetslice  | 1,494,384 | 1,547,681 | 1,665,360 | 1,810,067 | 1,932,900 |
+| sparsesetgroup  | 1,484,411 | 1,545,807 | 1,671,500 | 1,754,020 | 2,003,138 |
+
+Allocations: 56–76/frame at 1k → 5006–7006/frame at 100k. Two orders of magnitude lower than attach/detach — mixed mutates through the Query iterator's `Get(cid) unsafe.Pointer` for both the integration and damage loops, so the per-row work doesn't go through the `Read[T] → s.Read → s.columns[cid]` path that surfaced as attach/detach's dominant cost.
+
+Peak heap at 100k: archetype 8.9 MB, sparsesetslice 8.2 MB, sparsesetgroup 8.3 MB. Tighter than attach/detach because mixed's churn doesn't grow column data slices unboundedly — slice-trim-and-append churn is similar across backends.
+
+#### Headline
+
+archetype leads on both workloads at every scale:
+
+- **Attach/detach** — leads ~30–40% at 100k (62.4 vs 88.4 vs 87.6 ns/entity). The structurally-expected sparseset win on column-independent component churn did not materialize.
+- **Mixed** — leads ~8% at 100k (14.21 vs 15.48 vs 15.46 ns/entity). Much tighter gap than attach/detach.
+
+sparsesetgroup and sparsesetslice are essentially tied on both workloads. The cross-boundary lockstep maintenance during attach/detach pays no measurable penalty over vanilla independent-column attach/detach — a meaningful result for sparsesetgroup's hybrid story.
+
+#### Why — attach/detach
+
+The expected sparseset win was structural: column-independent updates vs archetype's row-move between archetypes. The data shows the opposite, and the reason is in the Read/Write path, not the structural path.
+
+Per tick at 100k: ~4000 deferred structural ops (1000 promote × 2 components + 1000 demote × 2 components, applied at end of tick) versus 200,000 Read/Write ops on Position (one read + one write per surviving entity). Read/Write dominates the per-tick op mix by 50:1.
+
+Sparseset's Read goes through `s.columns[cid]` — a Go map lookup per call. Archetype's Read goes through `loc.arch.columnFor(cid)` — a linear scan over 1–3 cids in the entity's archetype. The per-op delta is ~13 ns; × 200k ops = ~2.6 ms/frame, almost exactly the headline gap (sparsesetslice 8.84 ms vs archetype 6.24 ms at 100k).
+
+sparsesetgroup pays the same map-lookup tax (its column lookup is identical to sparsesetslice's). Its declared-group fast path applies to iteration via Query, not to point Read/Write; this workload doesn't iterate via Query, so the fast path never fires. The boundary-cross attach/detach cost is real but small relative to the dominant Read/Write cost — explaining the within-noise tie with sparsesetslice.
+
+#### Why — mixed
+
+Mixed mutates through the iterator (`(*Position)(it.Get(posID))`) rather than through point Read/Write. The iterator resolves the column pointer once per Query call (cached on the iterator's per-column refs), so the per-row work doesn't repeat the column lookup that surfaced in attach/detach. archetype's lead shrinks to ~8% — the residual gap is the per-row sparse probe sparseset's non-driver columns still pay versus archetype's contiguous-row data layout within an archetype.
+
+sparsesetgroup's declared-group fast path applies to the damage query (`{P, V, H}` exactly matches the declared group, runs over 50k decorated entities). The integration query (`{P, V}`) is a strict subset of the declared group; sparsesetgroup falls back to slice-style traversal on 100k entities, paying the unified-iterator tax R-008's caveat predicted. The two effects roughly cancel — sparsesetgroup matches sparsesetslice within 0.1%.
+
+#### Cumulative leaderboard (p50 per entity-of-N at 100k, ns)
+
+| Workload          |  archetype | sparsesetslice | sparsesetgroup |
+|-------------------|-----------:|---------------:|---------------:|
+| iteration         |       8.73 |           8.67 |       **7.87** |
+| multi_full        |       3.95 |           4.72 |       **3.67** |
+| multi_partial     |   **5.96** |           6.25 |           6.97 |
+| structural_steady | **1.84/op**|        2.62/op |        3.06/op |
+| attach_detach     |  **62.41** |          88.41 |          87.58 |
+| mixed             |  **14.21** |          15.48 |          15.46 |
+
+archetype leads or ties on every workload row except declared-group iteration. sparsesetgroup wins iteration baseline and `multi_full` (queried set matches the declared group), trails on `multi_partial` (~17%) and every structural workload (5–15%). sparsesetslice leads nowhere definitively.
+
+#### Implication for the engine decision
+
+The cumulative picture is converged and consistent. D-027 logs the engine-storage decision: archetype as default; sparsesetgroup preserved as a per-system option for stable hot-query subsystems contingent on future measurement evidence; sparsesetslice not adopted (no workload axis where it leads after D-026's archetype pivot).
+
+The dominant cost the attach/detach workload surfaced — sparseset's per-call `s.columns[cid]` map lookup — is a real ergonomic tax for any usage pattern that bypasses the iterator. Whether the engine's typed call-site surface forces that bypass (per-entity point Read/Write) or allows iterator-style access is a forward-looking question referenced in D-027's open-questions list; the storage choice doesn't preclude either, but the typed surface design will want this finding in scope.
+
+#### Status
+
+Workload row complete. Nine of nine `Storage` interface methods landed across the three active backends (`sparsesetmap` retains its R-007 culled status, with `Read` / `Write` / `Attach` / `Detach` still panic-stubbed; it is not a target). Decisions logged this session: D-027 (engine adopts archetype). Concept culled this session: `concepts/engine/ecs-storage.md` (question settled by D-027; no forward-looking content not already in D-027 or this README).
+
+The experiment itself is retained pending the engine-source integration session: the success path is *experiment validates concept → concept resolved → design integrates into engine source → experiment removed at that integration session's closeout*. The first three steps landed this session; the fourth lands when actual engine source begins consuming the storage strategy.

@@ -73,8 +73,12 @@ func newBackend(name string, groups [][]component.ID) storage.Storage {
 
 func selectWorkload(name string) (func(storage.Storage, int), func(storage.Storage)) {
 	switch name {
+	case "attach_detach":
+		return workload.AttachDetachSetup, workload.AttachDetachTick
 	case "iteration":
 		return workload.IterationSetup, workload.IterationTick
+	case "mixed":
+		return workload.MixedSetup, workload.MixedTick
 	case "multi_full":
 		return workload.MultiComponentSetup, workload.MultiFullTick
 	case "multi_partial":
@@ -94,8 +98,12 @@ func selectWorkload(name string) (func(storage.Storage, int), func(storage.Stora
 
 func selectWorkloadGroups(name string) [][]component.ID {
 	switch name {
+	case "attach_detach":
+		return workload.AttachDetachGroups()
 	case "iteration":
 		return workload.IterationGroups()
+	case "mixed":
+		return workload.MixedGroups()
 	case "multi_full", "multi_partial":
 		return workload.MultiGroups()
 	case "structural_steady", "structural_cycle", "structural_growth":

@@ -26,10 +26,23 @@ func (c *column) ensureSparseCapacity(id entity.ID) {
 	}
 }
 
+type attachComponent struct {
+	id   entity.ID
+	cid  component.ID
+	data []byte
+}
+
+type detachComponent struct {
+	id  entity.ID
+	cid component.ID
+}
+
 type Storage struct {
 	columns   map[component.ID]*column
 	alloc     *entity.Allocator
 	despawned []entity.ID
+	attached  []attachComponent
+	detached  []detachComponent
 }
 
 var _ storage.Storage = (*Storage)(nil)
@@ -45,15 +58,26 @@ func (s *Storage) ApplyDeferred() {
 	for _, id := range s.despawned {
 		s.applyDespawn(id)
 	}
+	for _, op := range s.detached {
+		s.applyDetach(op)
+	}
+	for _, op := range s.attached {
+		s.applyAttach(op)
+	}
 	s.despawned = s.despawned[:0]
+	s.detached = s.detached[:0]
+	s.attached = s.attached[:0]
 }
 
 func (s *Storage) Attach(id entity.ID, cid component.ID, data unsafe.Pointer) {
-	panic("not implemented")
+	size := component.TypeOf(cid).Size()
+	buf := make([]byte, size)
+	copy(buf, unsafe.Slice((*byte)(data), size))
+	s.attached = append(s.attached, attachComponent{id: id, cid: cid, data: buf})
 }
 
 func (s *Storage) Detach(id entity.ID, cid component.ID) {
-	panic("not implemented")
+	s.detached = append(s.detached, detachComponent{id: id, cid: cid})
 }
 
 func (s *Storage) Despawn(id entity.ID) {
@@ -73,11 +97,28 @@ func (s *Storage) Spawn(components []component.Value) entity.ID {
 }
 
 func (s *Storage) Read(id entity.ID, cid component.ID) (unsafe.Pointer, bool) {
-	panic("not implemented")
+	c, ok := s.columns[cid]
+	if !ok {
+		return nil, false
+	}
+	if int(id) >= len(c.sparse) || c.sparse[id] == -1 {
+		return nil, false
+	}
+	row := int(c.sparse[id])
+	return unsafe.Pointer(&c.dense[uintptr(row)*c.size]), true
 }
 
 func (s *Storage) Write(id entity.ID, cid component.ID, data unsafe.Pointer) {
-	panic("not implemented")
+	c, ok := s.columns[cid]
+	if !ok {
+		return
+	}
+	if int(id) >= len(c.sparse) || c.sparse[id] == -1 {
+		return
+	}
+	row := int(c.sparse[id])
+	dst := uintptr(row) * c.size
+	copy(c.dense[dst:dst+c.size], unsafe.Slice((*byte)(data), c.size))
 }
 
 func (s *Storage) Query(set []component.ID) storage.Iterator {
@@ -107,6 +148,31 @@ func (s *Storage) applyDespawn(id entity.ID) {
 		}
 	}
 	s.alloc.Free(id)
+}
+
+func (s *Storage) applyAttach(op attachComponent) {
+	c := s.getOrCreateColumn(op.cid)
+	c.ensureSparseCapacity(op.id)
+	if c.sparse[op.id] != -1 {
+		row := int(c.sparse[op.id])
+		dst := uintptr(row) * c.size
+		copy(c.dense[dst:dst+c.size], op.data)
+		return
+	}
+	c.sparse[op.id] = int32(len(c.entities))
+	c.entities = append(c.entities, op.id)
+	c.dense = append(c.dense, op.data...)
+}
+
+func (s *Storage) applyDetach(op detachComponent) {
+	c, ok := s.columns[op.cid]
+	if !ok {
+		return
+	}
+	if int(op.id) >= len(c.sparse) || c.sparse[op.id] == -1 {
+		return
+	}
+	c.swapRemove(op.id)
 }
 
 func (s *Storage) getOrCreateColumn(cid component.ID) *column {

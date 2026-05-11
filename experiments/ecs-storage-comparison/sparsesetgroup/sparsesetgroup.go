@@ -1,6 +1,7 @@
 package sparsesetgroup
 
 import (
+	"slices"
 	"unsafe"
 
 	"ecs-storage-comparison/component"
@@ -55,11 +56,24 @@ func (c *column) swapRemove(id entity.ID) {
 	c.sparse[id] = -1
 }
 
+type attachComponent struct {
+	id   entity.ID
+	cid  component.ID
+	data []byte
+}
+
+type detachComponent struct {
+	id  entity.ID
+	cid component.ID
+}
+
 type Storage struct {
 	columns   map[component.ID]*column
 	groups    []*group
 	alloc     *entity.Allocator
 	despawned []entity.ID
+	attached  []attachComponent
+	detached  []detachComponent
 }
 
 var _ storage.Storage = (*Storage)(nil)
@@ -86,15 +100,26 @@ func (s *Storage) ApplyDeferred() {
 	for _, id := range s.despawned {
 		s.applyDespawn(id)
 	}
+	for _, op := range s.detached {
+		s.applyDetach(op)
+	}
+	for _, op := range s.attached {
+		s.applyAttach(op)
+	}
 	s.despawned = s.despawned[:0]
+	s.detached = s.detached[:0]
+	s.attached = s.attached[:0]
 }
 
 func (s *Storage) Attach(id entity.ID, cid component.ID, data unsafe.Pointer) {
-	panic("not implemented")
+	size := component.TypeOf(cid).Size()
+	buf := make([]byte, size)
+	copy(buf, unsafe.Slice((*byte)(data), size))
+	s.attached = append(s.attached, attachComponent{id: id, cid: cid, data: buf})
 }
 
 func (s *Storage) Detach(id entity.ID, cid component.ID) {
-	panic("not implemented")
+	s.detached = append(s.detached, detachComponent{id: id, cid: cid})
 }
 
 func (s *Storage) Despawn(id entity.ID) {
@@ -166,11 +191,28 @@ func (s *Storage) Query(set []component.ID) storage.Iterator {
 }
 
 func (s *Storage) Read(id entity.ID, cid component.ID) (unsafe.Pointer, bool) {
-	panic("not implemented")
+	c, ok := s.columns[cid]
+	if !ok {
+		return nil, false
+	}
+	if int(id) >= len(c.sparse) || c.sparse[id] == -1 {
+		return nil, false
+	}
+	row := int(c.sparse[id])
+	return unsafe.Pointer(&c.dense[uintptr(row)*c.size]), true
 }
 
 func (s *Storage) Write(id entity.ID, cid component.ID, data unsafe.Pointer) {
-	panic("not implemented")
+	c, ok := s.columns[cid]
+	if !ok {
+		return
+	}
+	if int(id) >= len(c.sparse) || c.sparse[id] == -1 {
+		return
+	}
+	row := int(c.sparse[id])
+	dst := uintptr(row) * c.size
+	copy(c.dense[dst:dst+c.size], unsafe.Slice((*byte)(data), c.size))
 }
 
 func (s *Storage) applyDespawn(id entity.ID) {
@@ -201,6 +243,92 @@ func (s *Storage) applyDespawn(id entity.ID) {
 		}
 	}
 	s.alloc.Free(id)
+}
+
+func (s *Storage) applyAttach(op attachComponent) {
+	c := s.getOrCreateColumn(op.cid)
+	c.ensureSparseCapacity(op.id)
+	if c.sparse[op.id] != -1 {
+		row := int(c.sparse[op.id])
+		dst := uintptr(row) * c.size
+		copy(c.dense[dst:dst+c.size], op.data)
+		return
+	}
+	c.sparse[op.id] = int32(len(c.entities))
+	c.entities = append(c.entities, op.id)
+	c.dense = append(c.dense, op.data...)
+	s.enterPrefixIfCovered(op.id, op.cid)
+}
+
+func (s *Storage) applyDetach(op detachComponent) {
+	c, ok := s.columns[op.cid]
+	if !ok {
+		return
+	}
+	if int(op.id) >= len(c.sparse) || c.sparse[op.id] == -1 {
+		return
+	}
+	s.exitPrefixIfInPrefix(op.id, op.cid)
+	c.swapRemove(op.id)
+}
+
+func (s *Storage) enterPrefixIfCovered(id entity.ID, cid component.ID) {
+	for _, g := range s.groups {
+		cidInGroup := slices.Contains(g.set, cid)
+		if !cidInGroup {
+			continue
+		}
+		fullyCovered := true
+		for _, c := range g.columns {
+			if int(id) >= len(c.sparse) || c.sparse[id] == -1 {
+				fullyCovered = false
+				break
+			}
+		}
+		if !fullyCovered {
+			continue
+		}
+		boundary := int32(g.size)
+		for _, c := range g.columns {
+			r := c.sparse[id]
+			if r == boundary {
+				continue
+			}
+			otherID := c.entities[boundary]
+			c.entities[r], c.entities[boundary] = c.entities[boundary], c.entities[r]
+			c.swapDenseRows(r, boundary)
+			c.sparse[id] = boundary
+			c.sparse[otherID] = r
+		}
+		g.size++
+	}
+}
+
+func (s *Storage) exitPrefixIfInPrefix(id entity.ID, cid component.ID) {
+	for _, g := range s.groups {
+		if !slices.Contains(g.set, cid) {
+			continue
+		}
+		c0 := g.columns[0]
+		if int(id) >= len(c0.sparse) {
+			continue
+		}
+		r := c0.sparse[id]
+		if r < 0 || r >= int32(g.size) {
+			continue
+		}
+		boundary := int32(g.size - 1)
+		if r != boundary {
+			otherID := c0.entities[boundary]
+			for _, c := range g.columns {
+				c.entities[r], c.entities[boundary] = c.entities[boundary], c.entities[r]
+				c.swapDenseRows(r, boundary)
+				c.sparse[id] = boundary
+				c.sparse[otherID] = r
+			}
+		}
+		g.size--
+	}
 }
 
 func (s *Storage) getOrCreateColumn(cid component.ID) *column {
