@@ -125,7 +125,15 @@ declaration and the scheduler's algorithm live in
 
 **Lifecycle.** The runtime owns startup, shutdown, and the phase
 transitions between them. Members register with the runtime; the
-runtime drives them, not the reverse.
+runtime drives them, not the reverse. The lifecycle protocol that
+members register through is the Coordinator pattern in
+`engine/lifecycle/`, lifted from herald's `pkg/lifecycle/` per D-028.
+Two-phase initialization separates cold start (dependency assembly,
+wireability validation) at the engine constructor from hot start
+(subsystems online; frame loop ready) at the engine's start
+operation. Outer-tier members participate via a uniform
+`Start(*lifecycle.Coordinator) error` binding on their per-concern
+contracts.
 
 **Resource ownership.** The runtime owns the lifetime of inner-tier
 resources — ECS storage, voxel data buffers, GPU resources — and

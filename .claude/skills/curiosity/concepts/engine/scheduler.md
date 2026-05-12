@@ -31,3 +31,18 @@ parallel?
   remain a runtime-provided primitive (channels with writers and
   readers) any task can use, with concrete shape deferred to
   experimentation (D-016).
+- The actor-model alternative for inner-tier subsystems
+  (subsystem-per-goroutine with channel-mediated cross-subsystem
+  communication) was considered and rejected per D-028's Alternatives
+  section. D-002's tier criterion explicitly identifies stable
+  interfaces between inner-tier subsystems as the bottleneck the
+  inner tier exists to avoid; channels are stable interfaces with
+  ~100 ns/op overhead. At inner-tier per-entity per-frame access
+  patterns the channel arithmetic collapses the frame budget
+  (~2.4M cross-subsystem ops/sec for physics↔ECS alone at 10k
+  entities × 60 fps × 4 ops/entity, before any actual work). Inner-
+  tier multi-threading happens instead through (a) within-subsystem
+  parallelism (worker pools over entity slices), (b) scheduler-aware
+  parallel Tasks via the read/write declarations above, and (c)
+  render-thread separation per `render-thread.md`. The actor model
+  is the *outer-tier* pattern per conventions §10.

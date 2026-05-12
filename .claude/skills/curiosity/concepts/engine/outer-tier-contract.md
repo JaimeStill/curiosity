@@ -40,3 +40,31 @@ lifetime when an outer-tier member is invoked or invokes the runtime?
   This refines the stable-contract commitment in D-002; promotion to a
   discrete decision is deferred until the contract receives a depth
   pass.
+- Per-concern contracts (the outbound interface plus the inner-tier-side
+  bridge code that consumes it) live in per-concern packages within
+  the engine module per D-028: `engine/audio/`, `engine/network/`,
+  `engine/storage/`, `engine/content/`. Interface-at-consumer
+  (conventions §5) places each contract alongside the bridge code
+  that consumes it; a centralized `engine/outer/` umbrella was
+  considered and rejected during D-028 for fracturing that cohesion.
+- Lifecycle binding is uniform across concerns. Each per-concern
+  contract includes a `Start(*lifecycle.Coordinator) error` method
+  per D-028; the Coordinator (in `engine/lifecycle/`, lifted from
+  herald's `pkg/lifecycle/`) orchestrates startup, readiness, and
+  shutdown across all outer-tier modules. The plug-in mechanism is
+  the Coordinator; the per-concern outbound surface is the bespoke
+  shape the asymmetry framing names.
+
+## Open design surface
+
+With the lifecycle binding settled by D-028, the concept's remaining
+forward-looking work is the **frame-loop adaptation**: how the
+runtime's tick interacts with outer-tier members whose cadences are
+independent of the frame (audio rate, network tick, I/O completion,
+user input). Herald's Coordinator was shaped for an HTTP request
+loop where members react to inbound requests; the engine drives a
+frame loop and brokers cross-cadence boundaries on the outer-tier
+members' behalf. The shape of that brokering — when the runtime
+yields to outer-tier consumers, how snapshots cross the boundary
+without forcing inner-tier internals through the contract — is the
+concept's primary remaining surface.
