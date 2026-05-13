@@ -154,3 +154,11 @@ State the result. Point to the next concrete step. Stop.
 No recap of what just happened when the change is visible. No
 anxious restatement of what was decided. End-of-turn output is the
 smallest text that orients you to "what's done, what's next."
+
+## On-demand maintenance
+
+The decision compaction pass and the reset cull pass are
+user-invoked maintenance operations on the history logs, distinct
+from session closeout. They are run when the user signals the logs
+feel heavy — never as a routine part of normal session flow. The
+protocol lives in `SKILL.md` under Compaction Operations.
