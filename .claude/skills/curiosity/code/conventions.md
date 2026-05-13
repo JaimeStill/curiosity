@@ -174,7 +174,7 @@ References:
 
 ## 9. Testing
 
-Tests live in a sibling `tests/` directory, not co-located `_test.go` files. Test packages use the `_test` suffix: `package agent_test`, `package hub_test`. This is black-box testing — only the public API is exercised, no access to unexported helpers.
+Tests are colocated with the source they exercise — `_test.go` files sit in the same directory as the package's source (D-032). Test packages use the `_test` suffix: `package agent_test`, `package engine_test`. This is black-box testing — only the public API is exercised, no access to unexported helpers.
 
 Style is heavily table-driven:
 
@@ -199,9 +199,9 @@ Helper functions use `t.Helper()` and stay in the same test file. No separate fi
 
 Real dependencies are preferred where practical: `t.TempDir()` for filesystem, `httptest.NewServer` for HTTP, real database connections for repository tests. Mocks are used when external dependencies make real impractical, and mocks themselves use functional options for ergonomic setup (`mock.WithChatResponse(...)`).
 
-**Inner-tier divergence.** Hot-path code may co-locate `_test.go` for benchmark access to unexported helpers. Document case-by-case why colocation is needed; the default remains sibling `tests/`.
+**Inner-tier divergence.** Hot-path code may use `package X` (same package as source, white-box) instead of `package X_test` to access unexported helpers for benchmarks or internal-state assertions. Document case-by-case why white-box access is needed; the default remains black-box `package X_test`.
 
-References:
+References (sibling-`tests/` pattern; this project diverges to colocation per D-032):
 - `~/tau/orchestrate/tests/` — black-box test layout for the orchestrate module
 - `~/tau/agent/mock/agent.go` — mock with functional options
 - `~/code/herald/tests/config/config_test.go:109-217` — table-driven config test

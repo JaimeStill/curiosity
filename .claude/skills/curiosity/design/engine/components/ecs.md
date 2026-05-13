@@ -37,25 +37,17 @@ is D-023's pattern realized at the engine layer.
 
 ### `engine/ecs/entity/`
 
-Owns the entity-identity surface.
+Owns the entity-identity surface. `entity.ID` and `entity.Allocator`
+are implemented per D-030; their shape, helpers, and method contracts
+live in `engine/ecs/entity/entity.go` and
+`engine/ecs/entity/allocator.go` plus their godoc.
 
-- `entity.ID` — `uint64` packed 32 bits index | 32 bits generation
-  per D-030. Helper methods `Index() uint32`, `Generation() uint32`.
-  Zero value (`entity.ID(0)`) is intrinsically invalid (index 0,
-  generation 0 — the allocator never produces generation 0; index
-  0 is reserved).
-- `entity.Allocator` — generation table + recycle pool. One per
-  `*World`; not a package-level singleton (D-030). The only
-  legitimate path to a valid `entity.ID` is through
-  `Allocator.Allocate()` — there is **no public constructor**
-  that takes (index, gen) parameters. This makes the type's
-  invariant — "all live IDs trace back to an allocator that knows
-  their generation" — structurally enforced.
-
-The allocator's surface (`Allocate`, `Recycle`, `Validate`) is the
-exclusive entity-lifecycle API; the world's Spawn / Despawn methods
-go through it. `Validate(eid)` is a single index + generation
-comparison, used by every API call that takes an `entity.ID`.
+Forward-looking: each `*World` instance will own its own allocator
+as an unexported field (D-030 §3). The world's Spawn / Despawn
+methods go through the allocator's `Allocate` / `Recycle` surface;
+every API call taking an `entity.ID` calls `Allocator.Validate` and
+translates a `false` result into `ErrStaleEntity` at the world
+boundary.
 
 ### `engine/ecs/component/`
 
@@ -122,14 +114,15 @@ Settled material absorbed from the prior
 
 ### Recycling
 
-Each `Despawn` (after its deferred apply) returns the entity's
-index to the allocator's recycle pool and increments the
-allocator's generation table for that index. Subsequent `Spawn`
-pops from the recycle pool when non-empty; otherwise allocates a
-fresh index from the high end. Without recycling, any storage
-layout indexed by EntityID would grow unboundedly with cumulative
-spawns; with recycling, memory cost stabilizes at
-peak-concurrent-entity-count rather than cumulative-spawn-count.
+Forward-looking: each `Despawn` (after its deferred apply) returns
+the entity's index to the allocator's recycle pool and increments
+the generation table for that index. The motivation: without
+recycling, any storage layout indexed by `entity.ID` would grow
+unboundedly with cumulative spawns. With recycling, memory cost
+stabilizes at peak-concurrent-entity-count rather than
+cumulative-spawn-count. The allocator-level mechanism is in
+`engine/ecs/entity/allocator.go`; the Despawn-side wiring lands
+with the world API in a later session.
 
 ### Generations
 
@@ -140,9 +133,9 @@ each (index, generation) pair is unique across the program's
 lifetime (until the generation counter wraps at 2^32, which is
 effectively never at voxel-game scale).
 
-Every API call taking an `entity.ID` validates the generation
-against the allocator's generation table; mismatch returns
-`ErrStaleEntity` synchronously. The cost is one index +
+Forward-looking: every world API call taking an `entity.ID` will
+validate via `Allocator.Validate`; a `false` result translates to
+`ErrStaleEntity` at the world boundary. The cost is one index +
 comparison per call.
 
 ### ApplyDeferred ordering

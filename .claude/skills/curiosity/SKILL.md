@@ -130,7 +130,7 @@ Some questions cannot be settled on paper. When validation requires hands-on exp
 
 Experiments are exempt from `code/conventions.md`. They are allowed to be quick and dirty — no `doc.go`, no unit-test ceremony, no convention enforcement.
 
-Experiments are time-bounded. An experiment exists only while its job is active. **Success path** — experiment validates a concept, concept is promoted to design, design is integrated into source code, then the experiment is removed in that integration session's closeout. **Failure path** — experiment falsifies or refines a concept, finding is captured in `concepts/`, then the experiment is removed in the same session's closeout. Either way, the working tree carries only experiments that still have a job; git history retains the originals for anyone who wants them.
+Completed experiments are retained as historical artifacts (D-033). The Finding section captures the experiment's durable conclusion; the directory persists past the milestone that informed engine or game source. **Success path** — experiment validates a concept; concept is promoted to design; design is integrated into source code. The Finding is updated as each milestone lands. **Failure path** — experiment falsifies or refines a concept; the finding is recorded; the affected concept is updated or culled. The experiment stays as the source record of the investigation. The isolation under `experiments/` keeps historical material structurally separated from production engine and game code.
 
 **No-graduation rule.** Experiment code never becomes engine or game code. Findings inform fresh implementation written against the validated design; the prototype is not lifted forward. The act of writing fresh implementation against a design is itself part of the validation.
 
@@ -177,7 +177,7 @@ A reset is a bookkeeping transaction that aligns design documentation, concepts,
 
 - **Integrated** — absorbed into code or implementation. The design or concept text is removed; the reset summary records what was absorbed and where. Findings from completed experiments are integrated when they reshape a concept or feed a design.
 - **Promoted** — concept is promoted to design. The concept file moves into the design tree; the reset summary records the originating concept and its new design home.
-- **Culled** — context removed as obsolete, superseded, or falsified. Includes design sections, concepts, and experiments whose job has ended.
+- **Culled** — context removed as obsolete, superseded, or falsified. Applies to design sections and concepts. Experiments are not culled — once complete, they remain as historical artifacts (D-033).
 - **Retained** — still forward-looking. Stays in place.
 
 There is no "completed but still documented" state. That state is the drift this protocol exists to prevent.
@@ -196,7 +196,6 @@ There is no "completed but still documented" state. That state is the drift this
 **Promoted**: concepts that became design entries, with traceability to originating concept
 
 **Culled**: context removed as obsolete, superseded, or falsified
-            (includes completed experiments)
 
 **Retained**: forward-looking context that remains
 
