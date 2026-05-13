@@ -29,7 +29,15 @@ When in doubt, default to outer-tier. The inner-tier exception is for code where
 
 Each major component is its own Go module with its own `go.mod`, `CHANGELOG.md`, and (when stable) `doc.go` per package. Sub-modules within a component repository isolate heavy third-party dependencies — for example, a cloud-provider integration lives in its own sub-module so consumers of the parent package don't pay for the cloud SDK transitively.
 
-`go.work` lives at the engine repository root and unifies engine modules during local development. The workspace at `~/code/curiosity/` is **not** a Go workspace; it is the planning superproject. Engine modules live under `~/code/curiosity/engine/` (gitignored from the workspace repo, with their own git history).
+`go.work` lives at the curiosity repository root and unifies the
+engine and any sibling outer-tier and game modules during local
+development. During the prototype phase, the engine module lives
+in-tree at `~/code/curiosity/engine/` as a self-contained sub-module
+of the curiosity repository (D-031); at release, the engine graduates
+to its own repository per D-028's framing and `go.work` moves with
+it. Game and outer-tier modules are gitignored from the curiosity
+repository until each independently graduates to in-tree tracking
+or its own repository.
 
 Target Go version: 1.26.x. Pin in each module's `go.mod` via `go 1.26.0`.
 
