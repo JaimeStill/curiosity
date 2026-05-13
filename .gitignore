@@ -1,5 +1,4 @@
 # Sub-project repos (live in their own git repos)
-/engine/
 /game/
 
 # Editor/OS noise
