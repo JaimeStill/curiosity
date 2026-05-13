@@ -158,6 +158,8 @@ The `Scope` field makes it visible at a glance which side of the engine/game lin
 
 **Append-only discipline.** Files are never edited in place. When a decision is reversed or superseded, a new file is added that references and supersedes the prior one. The original stays as a historical record. This keeps the log trustworthy as a record of how thinking evolved.
 
+**Compaction exception.** A *decision compaction pass* (see Compaction Operations) is the only sanctioned operation that absorbs, compacts, discards, or removes entries. The pass is itself a recorded transaction.
+
 Decisions worth logging include but are not limited to: choice of dependency, inner-tier architectural commitments, file format and protocol decisions, threading and lifecycle models, and any decision the future self will want to reconstruct the reasoning for.
 
 ## Reset Protocol
@@ -208,6 +210,41 @@ There is no "completed but still documented" state. That state is the drift this
 Summaries are short. A reset is bookkeeping, not narrative.
 
 The `Next session focus` field is the artifact that connects sessions — written at one session's close, read at the next session's start as the orientation seed.
+
+**Cull exception.** A *reset cull pass* (see Compaction Operations) is the only sanctioned operation that removes resets or renumbers them.
+
+## Compaction Operations
+
+Compaction operations are user-invoked maintenance passes that reshape the history logs against current reality. They are recorded exceptions to the append-only discipline of the decisions and resets logs — invoked on demand when the logs feel heavy, never as part of normal session flow.
+
+Two passes are defined, each invoked independently:
+
+- **Decision compaction pass** — reshapes `history/decisions/` against the current state of the skill, behavior, conventions, and source.
+- **Reset cull pass** — removes resets whose transactions are no longer forward-looking and renumbers survivors.
+
+### Decision compaction pass
+
+For each file in `history/decisions/`, triage into one of four buckets:
+
+- **Discard** — superseded by a later decision with clear evolution of thought. Discard the superseded entry; the later decision stands as the live one. If the contradiction is not a clean evolution, pause and align with the user before acting.
+- **Absorb** — substance reads as a durable convention or principle. Write the convention as a present-tense rule into its natural home: `SKILL.md` (working agreement), a `.claude/behavior/<file>.md` (operational behavior), `code/conventions.md` (source-code style), or source code itself when the convention is structurally enforced. Revise existing partial mentions; never duplicate. Remove the standalone D-### file after absorption.
+- **Compact** — substance is a point-in-time architectural or implementation choice now embodied in code but worth preserving for "why was it built this way." Append to `history/decisions/archive.md`, preserving the original D-### prefix inline. Remove the standalone file.
+- **Retain** — substance is still load-bearing as a live, standalone decision (recent, hotly-contested, or actively cited by ID elsewhere). Leave the file unchanged.
+
+The pass produces a reset entry with `Scope: project` and `Trigger: Decision compaction pass`, using the standard reset transaction shape. The body lists each decision under one of `Absorbed:`, `Compacted:`, `Discarded:`, `Retained:` — absorptions name the destination file and section; discards name the superseding D-###. The reset entry is the audit trail.
+
+**`archive.md` shape.** Single rolling file at `history/decisions/archive.md`. Header describes its role. Entries appended in original chronological order. Each entry preserves the original `D-###` prefix, title, date, and scope, and collapses the original Context / Decision / Reasoning / Alternatives fields into a single paragraph. Original verbose entries remain recoverable from git history.
+
+### Reset cull pass
+
+For each file in `history/resets/`, evaluated during planning against what the upcoming work will need:
+
+- **Still relevant?** A reset is retained if its Retained, Promoted, or Next-session-focus content still informs work not yet completed. Typical signals: a named concept remains in `concepts/`, a promotion has not yet been integrated into source, or the next session's focus has not yet been honored.
+- **Otherwise cull.** Remove the file. Resets are highly volatile and not referenced by R-### outside `history/`, so removal is safe.
+
+Recency is not by itself a retention criterion. The most recent reset is usually retained because its Next-session-focus is typically still load-bearing, but that is an emergent property of the relevance test, not an axiom.
+
+After culls, renumber survivors starting from R-001 in original chronological order. Add a one-line maintenance note at the top of the now-renumbered most recent reset's body: `Maintenance: a Reset Cull Pass was run on YYYY-MM-DD; N resets were culled and survivors renumbered.` No separate audit file — git history is the deeper trail.
 
 ## When This Skill Activates
 
