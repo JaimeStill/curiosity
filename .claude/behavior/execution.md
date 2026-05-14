@@ -79,10 +79,9 @@ My responsibilities engage in coordinated order:
    Review what the session accomplished. Evaluate the current state
    of `design/`, `concepts/`, and `experiments/`. Surface (a) any
    concept→design promotions, (b) any concept culls, (c) any design
-   absorptions where source landed, (d) any experiment removals
-   whose job has ended, (e) the next session's focus and type. The
-   discussion produces the to-do list for the remaining closeout
-   steps.
+   absorptions where source landed, (d) the next session's focus
+   and type. The discussion produces the to-do list for the
+   remaining closeout steps.
 
 4. **Decisions log.** Add new entries to
    `.claude/skills/curiosity/history/decisions/` (one file per decision,

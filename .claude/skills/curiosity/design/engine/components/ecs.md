@@ -51,28 +51,36 @@ boundary.
 
 ### `engine/ecs/component/`
 
-Owns the component-identity surface. Designed fresh against the
-no-graduation rule, with the experiment's package
-(`experiments/ecs-storage-comparison/component/`) as a guide.
+Owns the component-identity surface. `component.ID`,
+`component.Value`, the type→ID registry (`IDFor[T]` / `TypeOf`),
+and `component.Signature` plus its methods are implemented across
+`engine/ecs/component/component.go`,
+`engine/ecs/component/registry.go`, and
+`engine/ecs/component/signature.go` with godoc on every exported
+symbol.
 
-- `component.ID` — small unsigned integer (uint16 sized for the
-  flat-array column index in archetype per D-030).
-  `component.InvalidID = 0`; valid IDs start at 1.
-- `component.Value` — type-erased component value (CID +
-  `unsafe.Pointer`). Internal mechanism used by the typed surface,
-  not user-facing. Per conventions §2, `unsafe.Pointer` is an
-  inner-tier divergence justified by hot-path constraints.
-- Type → ID registry — `IDFor[T]() component.ID` cached lookup
-  from Go's reflect.Type to component.ID. Components are
-  user-defined types; their IDs are assigned on first registration.
-- `component.Signature` — bitset over component IDs (uint64 in
-  the experiment's iteration; sizing reconsidered when the engine's
-  MaxCID is firm). `Set`, `Has`, `Contains`, `SignatureOf` per the
-  experiment's surface.
+`MaxCID = 2048` is the upper bound on simultaneously-registered
+component types within one engine instance. The constant sizes
+both the archetype storage's per-CID column index (a flat array
+per D-030 §6) and the `Signature` bitset
+(`[MaxCID/64]uint64` — 32 uint64 words, ~256 B per signature;
+archetype's `columnFor` at ~4 KB per archetype). Aligning
+`Signature` and `columnFor` against the same constant is
+deliberate: archetype signatures compare bit-for-bit without
+dynamic width handling, and downstream code has a single point to
+revisit if the bound changes. The plan-exit alternative — carrying
+a uint64 signature forward and revisiting at archetype time — was
+rejected because it would force a separate width invariant for
+`Signature` vs. `columnFor` and risk drift between them. The 2048
+value pays a modest per-archetype memory cost and is well past
+plausible component-type counts; revisit if D-027's
+"archetype-table memory growth past 100k entities" open question
+materializes a budget problem against the per-archetype ~4 KB
+column index.
 
-These are the primitives every higher-level ECS code uses.
-Archetype keys on signatures; queries match against them; the
-typed API surface derives CIDs via `IDFor[T]()`.
+Forward-looking: archetype keys signatures, queries match against
+them, and the typed API surface derives CIDs via `IDFor[T]()`.
+Each integration constraint lands when its consumer lands.
 
 ### `engine/ecs/archetype/`
 
