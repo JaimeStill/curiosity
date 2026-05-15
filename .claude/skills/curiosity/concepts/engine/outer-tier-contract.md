@@ -10,7 +10,7 @@ lifetime when an outer-tier member is invoked or invokes the runtime?
 ## Constraints already locked in
 
 - Outer-tier members plug into the runtime through a stable contract
-  (D-002; `design/engine/runtime.md` — Outer-tier members section
+  (`design/engine/runtime.md` — Outer-tier members section
   opener).
 - The contract is stable enough that the runtime can evolve inner-tier
   internals freely as long as it holds, and outer-tier members can be
@@ -37,27 +37,27 @@ lifetime when an outer-tier member is invoked or invokes the runtime?
   — is consistent across members. Whether implemented as a single
   handle or as a coherent set of handles, every outer-tier member sees
   the same set of capabilities; no member receives a tailored sub-API.
-  This refines the stable-contract commitment in D-002; promotion to a
-  discrete decision is deferred until the contract receives a depth
-  pass.
+  This refines the stable-contract commitment captured in
+  `design/engine/runtime.md`; the refinement remains concept-tier
+  until the contract receives a depth pass.
 - Per-concern contracts (the outbound interface plus the inner-tier-side
   bridge code that consumes it) live in per-concern packages within
-  the engine module per D-028: `engine/audio/`, `engine/network/`,
+  the engine module: `engine/audio/`, `engine/network/`,
   `engine/storage/`, `engine/content/`. Interface-at-consumer
-  (conventions §5) places each contract alongside the bridge code
-  that consumes it; a centralized `engine/outer/` umbrella was
-  considered and rejected during D-028 for fracturing that cohesion.
+  (`code/conventions.md` §5) places each contract alongside the
+  bridge code that consumes it; a centralized `engine/outer/`
+  umbrella was considered and rejected for fracturing that cohesion.
 - Lifecycle binding is uniform across concerns. Each per-concern
-  contract includes a `Start(*lifecycle.Coordinator) error` method
-  per D-028; the Coordinator (in `engine/lifecycle/`, lifted from
-  herald's `pkg/lifecycle/`) orchestrates startup, readiness, and
-  shutdown across all outer-tier modules. The plug-in mechanism is
-  the Coordinator; the per-concern outbound surface is the bespoke
+  contract includes a `Start(*lifecycle.Coordinator) error` method;
+  the Coordinator (in `engine/lifecycle/`, lifted from herald's
+  `pkg/lifecycle/`) orchestrates startup, readiness, and shutdown
+  across all outer-tier modules. The plug-in mechanism is the
+  Coordinator; the per-concern outbound surface is the bespoke
   shape the asymmetry framing names.
 
 ## Open design surface
 
-With the lifecycle binding settled by D-028, the concept's remaining
+With the lifecycle binding settled, the concept's remaining
 forward-looking work is the **frame-loop adaptation**: how the
 runtime's tick interacts with outer-tier members whose cadences are
 independent of the frame (audio rate, network tick, I/O completion,

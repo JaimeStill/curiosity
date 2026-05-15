@@ -29,6 +29,8 @@ This is as much a learning project as a building project. Decisions favor unders
 
 **No premature optimization.** Correctness and clarity first. Performance work happens against measured problems, not anticipated ones.
 
+**Joint evaluation.** Architectural alternatives are judged across performance, implementation complexity, and development ergonomics together — not by performance alone. Complexity carries cost over the project's lifetime; ergonomics determines what the user can confidently reason about and modify. The winner is the alternative with the highest joint score, not the highest performance score in isolation. Performance gaps must be substantial and load-bearing to justify substantial complexity or ergonomic cost. The judgment is qualitative; there are no formal weights or scoring rubrics.
+
 **Vertical over horizontal.** When integrating multiple subsystems, build a deliberately crude end-to-end path before deepening any single component. Integration risk surfaces early or it surfaces expensively.
 
 **Engine-first generalization.** When the reference game surfaces a requirement, the question is whether it generalizes to other voxel games. If yes, it informs engine design at the appropriate layer of abstraction. If no, it lives in game code. The engine never grows premise-specific concepts.
@@ -78,16 +80,62 @@ The dependency policy applies independently to engine and game code. Game-side d
     <experiment-name>/
       README.md                         Question / Approach / Finding
       <go source>                       prototype code (exempt from conventions)
-  <engine, game, ...>                   source repos, gitignored from this workspace
+  engine/                               in-tree during prototype phase
+  go.work                               unifies engine + any in-tree modules
+  <game, outer-tier modules>            separate repos, gitignored from this workspace
 ```
 
-Source layout reflects the engine/game separation: engine code and game code live in distinct trees as gitignored sibling directories under the workspace, each with its own git history. The engine has no compile-time dependency on game code.
+Source layout reflects the engine/game separation. During the prototype phase, the engine module lives in-tree at `~/code/curiosity/engine/` as a self-contained Go sub-module of the curiosity repository; once the engine reaches release stability, it graduates to its own repository with separate git history. Game and outer-tier-implementation modules remain gitignored sibling directories under the workspace, each carrying its own git history. The engine has no compile-time dependency on game code.
 
 The `design/` and `concepts/` directories are paired and mirror each other's scope tree (`engine/`, `game/`, project-level). `design/` holds codified intent; `concepts/` holds unvalidated candidates. Concepts are promoted to design only via deliberate bookkeeping in the reset log.
 
 The `experiments/` directory holds standalone Go programs for hands-on validation of concepts that paper alone cannot settle. Experiments are tracked in this repo because their findings inform the planning surface; they are not separate projects, and their code is short-lived (an experiment is removed once its job is done — see the Reset Protocol section).
 
 The `resources/` directory holds reference material that is not subject to the documentation-decay discipline — curated lists, acquisition references, external pointers. It exists alongside the planning surface but follows different rules: entries are added or revised as the external landscape shifts, not as code absorbs them.
+
+## Context surfaces
+
+The official-context surface — every file outside `history/` — is the project's durable reference. Each surface carries a topic, a volatility profile, and a belongs-here test. The compaction protocol consults this section to find homes for substance graduating out of volatile context, and everyday writing consults it to choose between sibling destinations when a piece of substance could plausibly live in more than one place.
+
+`history/` is the boundary case: deliberately volatile context that churns through sessions and compaction passes. Substance there is either graduating out — to one of the surfaces below — or being culled. The discipline of this section is what makes graduation mechanical instead of judgment-grade.
+
+Surfaces are grouped below by cluster. Each entry names what the surface represents, how stable its content is, how its content is organized internally, and the test that decides whether new substance belongs here versus a sibling.
+
+### Workspace conduct
+
+**`.claude/CLAUDE.md`** is the workspace-level master directive file, loaded automatically every session. Stable and short: session-start posture, partnership disciplines, the behavior-layer index. Content is organized as terse master sections that point downward to the behavior layer for detail. *Belongs here*: directives that govern every session regardless of phase or task. *Doesn't*: per-phase operational detail (→ `.claude/behavior/`), project workflow (→ `SKILL.md`), Go style (→ `code/conventions.md`).
+
+**`.claude/behavior/<name>.md`** is the topical expansion of workspace conduct, one file per cluster (`execution`, `source-code`, `communication`, `collaboration`, `verification`). Loaded on demand per CLAUDE.md's *Load when* descriptions. Moderately stable — revised as the collaboration model evolves, not on every session. Each file stands on its own when loaded in isolation; sections within a file are themselves topical. *Belongs here*: operational rules for one cluster of work, with the depth to apply the cluster without cross-loading. *Doesn't*: terse master directives (→ `CLAUDE.md`), project-level discipline (→ `SKILL.md`), Go style (→ `code/conventions.md`).
+
+### Project skill
+
+**`.claude/skills/curiosity/SKILL.md`** is the project's working agreement: scope, principles, dependency policy, repository layout, this inventory, design-documentation conventions, history-log shapes, and protocols (reset, compaction). Loaded whenever the curiosity skill is invoked. Stable — revisions are deliberate and recorded as compaction-pass entries or session-closeout updates. Content is organized as topical sections; each section is the canonical home for its concern. *Belongs here*: project-wide rules, principles, and protocols that apply across engine and game work. *Doesn't*: workspace conduct (→ `CLAUDE.md` + `.claude/behavior/`), Go source-code style (→ `code/conventions.md`), forward-looking engine architecture (→ `design/engine/` or `concepts/engine/`).
+
+**`.claude/skills/curiosity/code/conventions.md`** is the Go source-code style reference for engine and game code, distilled from the tau and herald codebases. Stable reference material — consulted at module-creation time and when an unsettled question surfaces. Not subject to documentation-decay discipline; entries codify patterns rather than describe forward-looking work. Organized as numbered sections (workspace topology, package documentation, interfaces, constructors, error model, testing, concurrency, etc.). *Belongs here*: Go style rules, layout conventions, idiom selections that apply across packages and persist through API churn. *Doesn't*: project workflow (→ `SKILL.md`), per-package design (→ `design/engine/`), workspace conduct (→ `CLAUDE.md` + behavior/).
+
+**`.claude/skills/curiosity/code/templates/`** holds scaffolding templates (`doc.go.tmpl`, `CHANGELOG.md.tmpl`) referenced by `conventions.md`. Stable — revised when convention changes mandate template updates. Each template is its own file. *Belongs here*: literal scaffolding to be instantiated at package- or module-creation time. *Doesn't*: prose conventions about when to use the templates (→ `conventions.md`).
+
+### Forward-looking planning
+
+**`.claude/skills/curiosity/design/engine/`** and **`design/game/`** hold codified, validated intent for things not yet built or not yet fully expressed in code. Settled — claims are grounded in source code, hard external constraints, or accumulated agreement among prior decisions and concept work. Revisable when constraints shift, but revision is deliberate. Engine design is organized hierarchically (`runtime.md` for the load-bearing engine document, `components.md` as the per-component index, `components/<name>.md` for depth on individual components). Game design is shallower, anchored by `premise.md`. Both follow the documentation-decay discipline: sections collapse when code can express them. *Belongs here*: forward-looking intent for engine or game architecture that is settled enough that the reader can rely on it. *Doesn't*: open questions or candidate approaches not yet decided (→ `concepts/`), historical reasoning about past decisions (lives in surrounding text or git history), source-code style (→ `code/conventions.md`).
+
+**`.claude/skills/curiosity/concepts/engine/`** and **`concepts/game/`** hold unvalidated candidates under consideration — open questions, exploratory directions, intent that is not yet ready for design. Deliberately malleable. The two trees mirror `design/`'s scope structure so promotion is structurally predictable. Game concepts default to staying malleable longer than engine concepts; engine concepts have more anchors in physical and computational constraint. Each file is one topical question (`<topic>.md`) with sections like *Question*, *Constraints already locked in*, *Open design surface*. Concepts are promoted to `design/` only via deliberate bookkeeping in the reset log; concepts that are falsified, superseded, or no longer load-bearing are culled. *Belongs here*: questions actively in play whose answers will eventually shape engine or game design but are not yet settled. *Doesn't*: settled intent (→ `design/`), historical "we picked A over B" narratives (lives in surrounding text or git history).
+
+### External pointers
+
+**`.claude/skills/curiosity/resources/`** holds reference material whose volatility is external to the project: curated lists, acquisition references, links into ecosystems outside the workspace (e.g., `assets.md`). Updated as the external landscape shifts, not as code absorbs them — explicitly outside the documentation-decay discipline. Each file is one topical resource catalog. *Belongs here*: pointers and curated lists whose value is "where to find X" rather than "what X is." *Doesn't*: working agreements (→ `SKILL.md`), conventions (→ `code/conventions.md`), design intent (→ `design/`).
+
+### Records of investigation
+
+**`experiments/<name>/`** holds hands-on R&D — standalone Go programs that answer questions paper alone cannot settle, plus a `README.md` carrying *Question / Approach / Finding*. Retained as historical artifacts: the directory persists past the milestone it informed, with the Finding section capturing the durable conclusion. Conventions exemption: experiment code is allowed to be quick and dirty (no `doc.go`, no unit-test ceremony). No-graduation rule: experiment code never becomes engine or game code; findings inform fresh implementation written against the validated design. Each experiment is isolated from engine and game source — it cannot drift into production code, only inform it. *Belongs here*: a self-contained investigation with a stated question and a recorded finding. *Doesn't*: production code (→ `engine/`, `game/`, outer-tier siblings), conventions or principles surfaced by the experiment (those graduate to `conventions.md`, `SKILL.md`, or `design/` per the relevant home).
+
+### Source code
+
+**`engine/`**, **`game/`**, and **sibling outer-tier modules** under `~/code/curiosity/` are the project's production code. Volatility varies by package maturity — primitives stabilize early, integration layers churn longer. Engine code is tracked in the curiosity repository during the prototype phase; game and outer-tier modules are gitignored from the workspace and each carry their own git history when they land. Organized per `code/conventions.md` (multi-module workspace, `doc.go` per package once stable, colocated black-box tests, etc.). *Belongs here*: implementation — types, functions, methods, configuration loading, the actual behavior. *Doesn't*: rules about how code is written (→ `code/conventions.md`), forward-looking architecture that hasn't been built (→ `design/` or `concepts/`), experiment prototypes (→ `experiments/`).
+
+### Boundary: volatile context
+
+**`.claude/skills/curiosity/history/decisions/`** and **`history/resets/`** are the volatile context this section frames against. Decisions accumulate as `D-###.<slug>.md` files; resets accumulate as `R-###.<slug>.md` files. Both are subject to compaction operations: decisions graduate to the official-context surfaces above (or are culled); resets are culled when no longer informing upcoming work. *Belongs here*: in-flight architectural reasoning awaiting graduation, and session-bookkeeping transactions. *Doesn't*: anything that has earned a home in official context — that lives in its home, with `history/` carrying at most the audit-trail reset entry that records the graduation.
 
 ## Design Documentation Conventions
 
@@ -108,7 +156,7 @@ Concepts that are falsified, superseded, or no longer load-bearing are culled, n
 
 **`design/engine/runtime.md`** is the load-bearing engine document. It captures runtime characteristics holistically — the inner-tier boundaries (the systems that share memory and frame lifecycle: ECS, voxel data, physics, rendering), the outer-tier contract (the interface plug-in components implement), and the runtime's own responsibilities (frame loop, scheduling, lifecycle, resource ownership). Per-sub-system detail lives in `components.md` and the per-component files it indexes. Referenced by everything else and the most expensive to get wrong.
 
-**`design/engine/components.md`** is the index of inner and outer component specifications. Each entry is one to two lines — the component's name, a brief responsibility, and a link to its per-component depth file (`design/engine/components/<name>.md`) when that file exists. The index sits empty until the first per-component depth file is created. It does not duplicate runtime.md's tier-placement framing, and it does not carry interface shape (interface shape is concept-tier until firm, per D-010).
+**`design/engine/components.md`** is the index of inner and outer component specifications. Each entry is one to two lines — the component's name, a brief responsibility, and a link to its per-component depth file (`design/engine/components/<name>.md`) when that file exists. The index sits empty until the first per-component depth file is created. It does not duplicate runtime.md's tier-placement framing, and it does not carry interface shape (interface shape is concept-tier until firm).
 
 **`design/engine/components/<name>.md`** is created when a component is about to receive concrete attention. Captures interface intent, internal model decisions, and constraints not yet enforced in code. Material that remains unsettled lives under `concepts/engine/`, not here. Dissolved into source when the component reaches a working MVP; the dissolution is recorded as a reset transaction.
 
@@ -122,6 +170,8 @@ Additional game design documents are created as the reference game's design surf
 
 Game concepts that are not yet ready for design live under `concepts/game/`.
 
+**Game-side malleability.** Game-side concepts and design hold material malleable longer than the workspace's iterative-depth principle alone would imply. Engine architecture has more anchors in physical and computational constraint, so deepening early is safer there; game design lives downstream of "what feels good in play," which paper alone cannot decide. When tempted to commit to a mechanism, prefer expanding the *Question* in `concepts/game/<topic>.md` — more sub-questions, more constraints made explicit — over proposing the mechanism; let playable validation decide which combinations land. When tempted to add a game-side aspiration that commits the engine to a specific feel, check whether the commitment is engine-pressure (it earns the bullet) or game-design preference (it lives in concepts).
+
 When a design doc section becomes describable from code alone, remove it. The reset log notes the absorption.
 
 ### Experiments
@@ -130,9 +180,11 @@ Some questions cannot be settled on paper. When validation requires hands-on exp
 
 Experiments are exempt from `code/conventions.md`. They are allowed to be quick and dirty — no `doc.go`, no unit-test ceremony, no convention enforcement.
 
-Completed experiments are retained as historical artifacts (D-033). The Finding section captures the experiment's durable conclusion; the directory persists past the milestone that informed engine or game source. **Success path** — experiment validates a concept; concept is promoted to design; design is integrated into source code. The Finding is updated as each milestone lands. **Failure path** — experiment falsifies or refines a concept; the finding is recorded; the affected concept is updated or culled. The experiment stays as the source record of the investigation. The isolation under `experiments/` keeps historical material structurally separated from production engine and game code.
+Completed experiments are retained as historical artifacts. The Finding section captures the experiment's durable conclusion; the directory persists past the milestone that informed engine or game source. **Success path** — experiment validates a concept; concept is promoted to design; design is integrated into source code. The Finding is updated as each milestone lands. **Failure path** — experiment falsifies or refines a concept; the finding is recorded; the affected concept is updated or culled. The experiment stays as the source record of the investigation. The isolation under `experiments/` keeps historical material structurally separated from production engine and game code.
 
 **No-graduation rule.** Experiment code never becomes engine or game code. Findings inform fresh implementation written against the validated design; the prototype is not lifted forward. The act of writing fresh implementation against a design is itself part of the validation.
+
+**Measurement integrity.** When an experiment's job is to measure cost — throughput, latency, allocation, memory, whatever the comparison depends on — the implementation faithfully reproduces the cost profile of a production-grade version of what is being measured, even when the chosen workload does not exercise that cost at runtime. A simplification that compresses measured cost relative to production is measurement bias by omission, and is not acceptable regardless of whether it is documented. The conventions exemption above governs style and ceremony; it does not govern measurement validity. Honesty in measurement is what the experiment produces; everything else (code reuse, brevity, exemption from style rules) is subordinate to it.
 
 ## Decisions Log
 
@@ -158,7 +210,7 @@ The `Scope` field makes it visible at a glance which side of the engine/game lin
 
 **Append-only discipline.** Files are never edited in place. When a decision is reversed or superseded, a new file is added that references and supersedes the prior one. The original stays as a historical record. This keeps the log trustworthy as a record of how thinking evolved.
 
-**Compaction exception.** A *decision compaction pass* (see Compaction Operations) is the only sanctioned operation that absorbs, compacts, discards, or removes entries. The pass is itself a recorded transaction.
+**Compaction exception.** A *decision compaction pass* (see Compaction Operations) is the only sanctioned operation that graduates or culls entries. The pass is itself a recorded transaction.
 
 Decisions worth logging include but are not limited to: choice of dependency, inner-tier architectural commitments, file format and protocol decisions, threading and lifecycle models, and any decision the future self will want to reconstruct the reasoning for.
 
@@ -179,7 +231,7 @@ A reset is a bookkeeping transaction that aligns design documentation, concepts,
 
 - **Integrated** — absorbed into code or implementation. The design or concept text is removed; the reset summary records what was absorbed and where. Findings from completed experiments are integrated when they reshape a concept or feed a design.
 - **Promoted** — concept is promoted to design. The concept file moves into the design tree; the reset summary records the originating concept and its new design home.
-- **Culled** — context removed as obsolete, superseded, or falsified. Applies to design sections and concepts. Experiments are not culled — once complete, they remain as historical artifacts (D-033).
+- **Culled** — context removed as obsolete, superseded, or falsified. Applies to design sections and concepts. Experiments are not culled — once complete, they remain as historical artifacts.
 - **Retained** — still forward-looking. Stays in place.
 
 There is no "completed but still documented" state. That state is the drift this protocol exists to prevent.
@@ -224,16 +276,22 @@ Two passes are defined, each invoked independently:
 
 ### Decision compaction pass
 
-For each file in `history/decisions/`, triage into one of four buckets:
+The pass triages every file in `history/decisions/` into one of two outcomes — **Graduate** or **Cull**. There is no archive: a decision either earns a home in official context or it is removed. Substance worth preserving graduates; substance not worth preserving is culled. Retention as a standalone D-### file between passes is the normal state and is not a pass outcome.
 
-- **Discard** — superseded by a later decision with clear evolution of thought. Discard the superseded entry; the later decision stands as the live one. If the contradiction is not a clean evolution, pause and align with the user before acting.
-- **Absorb** — substance reads as a durable convention or principle. Write the convention as a present-tense rule into its natural home: `SKILL.md` (working agreement), a `.claude/behavior/<file>.md` (operational behavior), `code/conventions.md` (source-code style), or source code itself when the convention is structurally enforced. Revise existing partial mentions; never duplicate. Remove the standalone D-### file after absorption.
-- **Compact** — substance is a point-in-time architectural or implementation choice now embodied in code but worth preserving for "why was it built this way." Append to `history/decisions/archive.md`, preserving the original D-### prefix inline. Remove the standalone file.
-- **Retain** — substance is still load-bearing as a live, standalone decision (recent, hotly-contested, or actively cited by ID elsewhere). Leave the file unchanged.
+**Mental model.** `history/` is volatile context that churns through sessions. Everything outside `history/` is official context, organized hierarchically by topic per *Context surfaces*. Compaction is the process by which volatile substance promotes into official context — or is dropped because it does not earn a place there. The discipline that protects this is the proliferation guard: do not manufacture a home for a decision that does not have one. The hierarchy is meant to stay organized, tidy, and easy to follow.
 
-The pass produces a reset entry with `Scope: project` and `Trigger: Decision compaction pass`, using the standard reset transaction shape. The body lists each decision under one of `Absorbed:`, `Compacted:`, `Discarded:`, `Retained:` — absorptions name the destination file and section; discards name the superseding D-###. The reset entry is the audit trail.
+**Graduate.** A decision graduates when its substance is load-bearing for future work AND a topically natural home exists in official context. The substance is written into that home as a present-tense rule, fact, or design statement; the standalone D-### file is removed; all `(D-###)` citations to it elsewhere are stripped or re-referenced so the surviving text reads without the decision pointer. *Context surfaces* names where each kind of substance belongs: working agreement → `SKILL.md`; workspace conduct → `CLAUDE.md` or `.claude/behavior/`; Go style → `code/conventions.md`; settled engine intent → `design/engine/`; open engine questions → `concepts/engine/`; source-level enforcement → engine or game source.
 
-**`archive.md` shape.** Single rolling file at `history/decisions/archive.md`. Header describes its role. Entries appended in original chronological order. Each entry preserves the original `D-###` prefix, title, date, and scope, and collapses the original Context / Decision / Reasoning / Alternatives fields into a single paragraph. Original verbose entries remain recoverable from git history.
+**Cull.** A decision is culled when (a) it is contradicted by a superseding decision such that it should not survive into official context, or (b) its substance is not load-bearing enough to warrant a home in the topical hierarchy. The standalone file is removed; no substance is preserved on a sidecar surface. Forward-looking citations to an unbuilt decision (e.g., a concept that cites "(D-###)" as the source of a constraint) are a signal that the decision belongs in the cited concept itself — not a reason to keep it standalone.
+
+**Citation discipline.** `(D-###)` citations belong only inside `history/`. After a decision graduates, its substance is the surrounding text in its destination; the citation pointer is redundant. The pass strips citations across the official-context surface so the prose reads on its own terms. Where a citation is paired with a destination pointer (e.g., `(D-002; design/engine/runtime.md — Inner-tier members)`), the `(D-###)` prefix is stripped and the pointer is kept.
+
+**Pause points.** Pause and align with the user when:
+- The contradiction with a superseder is not a clean evolution.
+- A Graduate candidate's natural home is ambiguous across multiple topical surfaces.
+- A decision feels Cull-eligible but the load-bearing call is judgment-grade.
+
+**Audit trail.** The pass produces a reset entry with `Scope: project` and `Trigger: Decision compaction pass`, using the standard reset transaction shape. The body lists each decision under `Graduated:` (with destination file and section) or `Culled:` (with rationale: contradicted-by or no-home). The reset entry plus git history is the audit trail; there is no separate archive.
 
 ### Reset cull pass
 

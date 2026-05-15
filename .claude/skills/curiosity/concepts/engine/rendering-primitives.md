@@ -11,7 +11,7 @@ voxel data and the ECS?
 
 ## Constraints already locked in
 
-- Rendering is inner-tier (D-002; `design/engine/runtime.md` —
+- Rendering is inner-tier (`design/engine/runtime.md` —
   Inner-tier members).
 - Rendering produces the frame's image and is the most demanding
   hot-path consumer; meshing, visibility, and command submission all
@@ -21,7 +21,7 @@ voxel data and the ECS?
   not represented as entities (`design/engine/runtime.md` —
   Inner-tier members, Voxel data paragraph).
 - Inner-tier members share memory layout, threading model, and frame
-  lifecycle (D-002; `design/engine/runtime.md` — Inner-tier members
+  lifecycle (`design/engine/runtime.md` — Inner-tier members
   section opener); a new dense substrate that joins the inner tier
   inherits that shared commitment.
 - Rendering's threading model is a load-bearing inner-tier commitment,
