@@ -20,7 +20,7 @@ what surface do they share with rendering, physics, and the ECS?
   animation interacts with the same transform surface and must
   coordinate with physics in the scheduler graph.
 - Inner-tier members share memory layout, threading model, and frame
-  lifecycle (D-002; `design/engine/runtime.md` — Inner-tier members
+  lifecycle (`design/engine/runtime.md` — Inner-tier members
   section opener); animation, wherever it lives in the inner tier,
   inherits that commitment.
 - The set of rendering primitives the engine supports

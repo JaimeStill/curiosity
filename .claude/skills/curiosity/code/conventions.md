@@ -33,8 +33,8 @@ Each major component is its own Go module with its own `go.mod`, `CHANGELOG.md`,
 engine and any sibling outer-tier and game modules during local
 development. During the prototype phase, the engine module lives
 in-tree at `~/code/curiosity/engine/` as a self-contained sub-module
-of the curiosity repository (D-031); at release, the engine graduates
-to its own repository per D-028's framing and `go.work` moves with
+of the curiosity repository; at release, the engine graduates to its
+own repository with separate git history and `go.work` moves with
 it. Game and outer-tier modules are gitignored from the curiosity
 repository until each independently graduates to in-tree tracking
 or its own repository.
@@ -58,6 +58,18 @@ References:
 **Timing.** `doc.go` is **not** written until the package or module is considered complete (API surface settled, no major refactors anticipated). Writing `doc.go` over volatile infrastructure creates documentation drift — the file has to be revised every time the package churns. Defer authoring until stability is reached; the template in `code/templates/doc.go.tmpl` exists for that moment, not before.
 
 The `doc.go` template is invoked during the closeout phase of the session in which the package reaches stability, not as part of new-package scaffolding.
+
+**Functional-spec READMEs.** When a package's value is the way it shapes data — the package contains multiple implementations being compared, or its data layout is non-obvious from the code alone — author an adjacent `README.md` that walks through the data model and operations using concrete examples. The README lives in the package or implementation directory it documents, follows the documentation-decay discipline that governs design docs, and is updated alongside the code it documents.
+
+The README carries:
+
+- Data-model invariants — what shape is maintained, what columns / structs / maps actually contain.
+- Algorithm shape under representative scenarios — concrete entity counts, ASCII layouts of buffers, walked-through state changes.
+- Structural behaviors that follow from the layout — what is cheap, what is expensive, what cross-cuts.
+
+It does *not* carry line-by-line code paraphrase, parameter contracts, exhaustive method lists, or status tables — the things godoc carries where godoc applies. A simple package whose source reads cleanly does not need this; the discipline is for infrastructure whose comparative or layout-driven dimension is load-bearing for understanding the work the package does.
+
+The discipline applies wherever the comparative or layout-driven dimension is load-bearing — experiments are the surfacing case (see the per-backend READMEs in `experiments/ecs-storage-comparison/`), but engine infrastructure with non-obvious data layouts is the same shape.
 
 ## 5. Interfaces
 
@@ -174,7 +186,7 @@ References:
 
 ## 9. Testing
 
-Tests are colocated with the source they exercise — `_test.go` files sit in the same directory as the package's source (D-032). Test packages use the `_test` suffix: `package agent_test`, `package engine_test`. This is black-box testing — only the public API is exercised, no access to unexported helpers.
+Tests are colocated with the source they exercise — `_test.go` files sit in the same directory as the package's source. Test packages use the `_test` suffix: `package agent_test`, `package engine_test`. This is black-box testing — only the public API is exercised, no access to unexported helpers.
 
 Style is heavily table-driven:
 
@@ -201,7 +213,7 @@ Real dependencies are preferred where practical: `t.TempDir()` for filesystem, `
 
 **Inner-tier divergence.** Hot-path code may use `package X` (same package as source, white-box) instead of `package X_test` to access unexported helpers for benchmarks or internal-state assertions. Document case-by-case why white-box access is needed; the default remains black-box `package X_test`.
 
-References (sibling-`tests/` pattern; this project diverges to colocation per D-032):
+References (sibling-`tests/` pattern; this project diverges to colocation):
 - `~/tau/orchestrate/tests/` — black-box test layout for the orchestrate module
 - `~/tau/agent/mock/agent.go` — mock with functional options
 - `~/code/herald/tests/config/config_test.go:109-217` — table-driven config test

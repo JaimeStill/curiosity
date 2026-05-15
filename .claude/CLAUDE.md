@@ -25,12 +25,24 @@ Orientation and agenda-setting happen there per
 
 ## Memory
 
-The auto-memory system is not used for this project (D-015). All
+The auto-memory system is not used for this project. All
 context — user preferences, project state, behavior shaping,
 decisions, conventions — lives in the repository. Guidance worth
 remembering goes into the decisions log (durable reasoning), the
 behavior layer (operational rules), or the skill (project workflow),
 never into memory.
+
+## GitHub
+
+GitHub serves only as source control and remote backup for this
+project. Issues, Projects, Discussions, Milestones, and Wiki are
+intentionally unused — all planning context lives in the repository,
+preserving single source of truth and cross-machine sync via the
+workspace repo. The same rationale that excludes auto-memory excludes
+external project-management surfaces: context split across surfaces
+becomes context that drifts. Each sub-project repo (engine, game,
+outer-tier modules) makes its own decision on GitHub features when
+spun up; the workspace policy does not propagate automatically.
 
 ## Behavior index
 

@@ -10,7 +10,7 @@ external constraints. Material that is not yet settled lives under
 
 ## Tier criterion
 
-The two-tier shape (D-002) draws its line at hot-path coupling. A
+The two-tier shape draws its line at hot-path coupling. A
 subsystem is inner-tier when its per-frame work shares memory layout,
 threading assumptions, or lifecycle phasing with other inner-tier
 subsystems closely enough that a stable interface between them would
@@ -127,7 +127,7 @@ declaration and the scheduler's algorithm live in
 transitions between them. Members register with the runtime; the
 runtime drives them, not the reverse. The lifecycle protocol that
 members register through is the Coordinator pattern in
-`engine/lifecycle/`, lifted from herald's `pkg/lifecycle/` per D-028.
+`engine/lifecycle/`, lifted from herald's `pkg/lifecycle/`.
 Two-phase initialization separates cold start (dependency assembly,
 wireability validation) at the engine constructor from hot start
 (subsystems online; frame loop ready) at the engine's start

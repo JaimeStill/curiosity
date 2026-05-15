@@ -9,7 +9,7 @@ that model, who holds GPU resources and who submits commands?
 
 ## Constraints already locked in
 
-- Rendering is inner-tier (D-002; `design/engine/runtime.md` —
+- Rendering is inner-tier (`design/engine/runtime.md` —
   Inner-tier members).
 - Rendering is the most demanding hot-path consumer; meshing,
   visibility, and command submission all run within the frame budget
@@ -17,8 +17,8 @@ that model, who holds GPU resources and who submits commands?
 - Rendering's threading model is a load-bearing inner-tier commitment,
   not an implementation detail downstream of other members
   (`design/engine/runtime.md` — Inner-tier members).
-- Inner-tier members share their threading model (D-002;
-  `design/engine/runtime.md` — Inner-tier members section opener); the
+- Inner-tier members share their threading model
+  (`design/engine/runtime.md` — Inner-tier members section opener); the
   scheduler participates in that commitment
   (`concepts/engine/scheduler.md`).
 - The runtime owns inner-tier resource lifetime, GPU resources included
